@@ -1,0 +1,26 @@
+version: '3.5'
+
+services:
+
+  importer:
+    image: indigoiam/voms-importer
+
+    environment:
+      - TZ=Europe/Rome
+      - BEARER_TOKEN
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/cert.pem
+
+    volumes:
+      - $HOME/git/indigo-aai-tutorial:/home/test/indigo-aai-tutorial
+      - $HOME/grid-security:/etc/grid-security/certificates
+      - $HOME/ca-bundle:/etc/pki
+      - $HOME/vomsdir:/etc/grid-security/vomsdir:ro
+      - $HOME/vomses:/etc/vomses
+      - $HOME/.globus:/home/test/.globus:ro
+      - $HOME/.config/oidc-agent:/home/test/.config/oidc-agent:ro
+      - ..:/home/test/workspace:cached
+
+    entrypoint: /tini -- sleep infinity
+
+    extra_hosts:
+      - "iam.local.io: 192.168.65.2"

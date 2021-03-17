@@ -28,6 +28,10 @@ def leaf_group_name(group):
     return group[idx+1:]
 
 
+def fqan_is_role(fqan):
+    return fqan.find("Role=") > 0
+
+
 def fqan2iam_group_name(fqan):
     return fqan.replace("Role=", "")[1:]
 
@@ -101,6 +105,47 @@ class VomsService:
         r.raise_for_status()
         return r.json()
 
+    def print_voms_accounts_sharing_email(self):
+        logging.info("Looking for accounts sharing email addresses...")
+        email_map = {}
+
+        pagesize = 300
+        start = 0
+        while True:
+            r = self.get_voms_users(
+                pagesize=pagesize, start=start)
+
+            logging.info("Processing %d VOMS users (out of %d)",
+                         start, r['count'])
+
+            for u in r['result']:
+                if u['suspended']:
+                    logging.debug("Skipping suspended account %s", u['id'])
+                    continue
+
+                if email_map.has_key(u['emailAddress']):
+                    email_map[u['emailAddress']].append(u['id'])
+                else:
+                    email_map[u['emailAddress']] = [u['id']]
+
+            if (r['startIndex']+r['pageSize'] < r['count']):
+                start = r['startIndex'] + r['pageSize']
+            else:
+                break
+
+        num_accounts_sharing_email = 0
+        for k in email_map.keys():
+            if len(email_map[k]) > 1:
+                num_accounts_sharing_email = num_accounts_sharing_email + \
+                    len(email_map[k])
+
+        logging.info(
+            "%d accounts found sharing email address with another account", num_accounts_sharing_email)
+
+        for k in email_map.keys():
+            if len(email_map[k]) > 1:
+                logging.info("%s => voms user ids: %s", k, email_map[k])
+
 
 class IamError(Exception):
     pass
@@ -144,7 +189,11 @@ class IamService:
         r.raise_for_status()
         data = r.json()
 
-        total_results = data['totalResults']
+        total_results = 0
+
+        if data.has_key('totalResults'):
+            total_results = data['totalResults']
+
         if total_results == 0:
             return None
         if total_results == 1:
@@ -194,12 +243,15 @@ class IamService:
         role_name = voms_role.replace("Role=", "")
         optional_group_name = "%s/%s" % (self._vo, role_name)
 
-        logging.debug("Importing VOMS role: %s as optional group: %s",
-                      voms_role, optional_group_name)
+        logging.info("Importing VOMS role: %s as optional group: %s",
+                     voms_role, optional_group_name)
         iam_group = self.find_group_by_name(optional_group_name)
 
         if not iam_group:
             iam_group = self.create_group_with_name(optional_group_name)
+        else:
+            logging.info("Optional group %s already present",
+                         iam_group['displayName'])
 
         self.label_group_as_optional(iam_group)
 
@@ -232,9 +284,13 @@ class IamService:
         r.raise_for_status()
         data = r.json()
 
-        if data['totalResults'] == 0:
+        total_results = 0
+        if data.has_key('totalResults'):
+            total_results = data['totalResults']
+
+        if total_results == 0:
             return None
-        elif data['totalResults'] == 1:
+        elif total_results == 1:
             return data['Resources'][0]
         else:
             raise IamError(
@@ -260,8 +316,18 @@ class IamService:
                 "Multiple IAM accounts found for label: %s" % voms_user['id'])
 
     def build_username(self, voms_user):
-        surname_id = "%s.%d" % (voms_user['surname'], voms_user['id'])
-        return surname_id.lower().replace(' ', '_')
+        user_id = "user.%d" % voms_user['id']
+
+        if self._username_attr:
+            for attr in voms_user['attributes']:
+                if attr['name'] == self._username_attr:
+                    return attr['value']
+            logging.error("Attribute %s not found for user %s. Will fall back to default username %s",
+                          self._username_attr, voms_user['id'], user_id)
+            return user_id
+
+        else:
+            return user_id
 
     def create_user_from_voms(self, voms_user):
         url = "%s://%s/scim/Users" % (self._protocol, self._host)
@@ -345,6 +411,15 @@ class IamService:
         r = self._s.put(label_url, json=label)
         r.raise_for_status()
 
+    def add_cern_person_id_label(self, iam_user, person_id):
+        label = {
+            'prefix': 'hr.cern',
+            'name': 'cern_person_id',
+            'value': person_id
+        }
+
+        self.add_user_label(iam_user, label)
+
     def add_user_to_group(self, iam_user, iam_group):
         logging.debug("Adding user %s to group %s", self.iam_user_str(
             iam_user), self.iam_group_str(iam_group))
@@ -379,7 +454,7 @@ class IamService:
                                     voms_user['name'],
                                     voms_user['surname'])
 
-        logging.debug("Importing VOMS user: %s", user_desc)
+        logging.info("Importing VOMS user: %s", user_desc)
 
         if voms_user['suspended']:
             logging.info("Skipping suspended user %s", user_desc)
@@ -407,23 +482,26 @@ class IamService:
             iam_user = self.create_user_from_voms(voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
-        logging.debug("Syncing group/role membership for user %s",
-                      iam_user_str)
+        logging.info("Syncing group/role membership for user %s",
+                     iam_user_str)
 
         for f in voms_user['fqans']:
-            logging.debug("Importing %s membership in VOMS FQAN: %s",
-                          iam_user_str, f)
+            logging.info("Importing %s membership in VOMS FQAN: %s",
+                         iam_user_str, f)
             iam_group_name = fqan2iam_group_name(f)
             iam_group = self.find_group_by_name(iam_group_name)
 
             if not iam_group:
                 iam_group = self.create_group_with_name(iam_group_name)
 
+                if fqan_is_role(f):
+                    self.label_group_as_optional(iam_group)
+
             self.add_user_to_group(iam_user, iam_group)
         # # FIXME: the script should also remove the user from groups where it doesn't belong anymore
 
-        logging.debug("Syncing generic attributes for user %s",
-                      iam_user_str)
+        logging.info("Syncing generic attributes for user %s",
+                     iam_user_str)
         for a in voms_user['attributes']:
             logging.debug("Importing %s attribute %s",
                           iam_user_str, a)
@@ -432,8 +510,8 @@ class IamService:
         cert_idx = 0
         for c in voms_user['certificates']:
             cert_idx = cert_idx + 1
-            logging.debug("Importing certificate %s for user %s" %
-                          (c, iam_user_str))
+            logging.info("Importing certificate %s for user %s" %
+                         (c, iam_user_str))
             if c['suspended']:
                 logging.info('Skipping certificate %s as is suspended' % c)
                 continue
@@ -446,6 +524,54 @@ class IamService:
 
             self.link_certificate(iam_user, cert)
 
+        if voms_user.has_key('cernHrId'):
+            logging.info("Linking user %s to CERN person id %d",
+                         iam_user_str, voms_user['cernHrId'])
+            self.add_cern_person_id_label(iam_user, voms_user['cernHrId'])
+
+        if self._link_cern_sso:
+            self.create_cern_sso_account_link(voms_user, iam_user)
+
+    def create_cern_sso_account_link(self, voms_user, iam_user):
+        url = "%s://%s/scim/Users/%s" % (self._protocol,
+                                         self._host, iam_user['id'])
+
+        nickname = None
+        for attr in voms_user['attributes']:
+            if attr['name'] == 'nickname':
+                nickname = attr['value']
+
+        if not nickname:
+            logging.warn("No nickname defined for voms user %s -> No CERN SSO account link" %
+                         voms_user['id'])
+            return
+
+        oidc_id = {
+            'issuer': 'https://auth.cern.ch/auth/realms/cern',
+            'subject': nickname
+        }
+
+        logging.info("Linking user %s to CERN SSO account %s",
+                     iam_user['displayName'], oidc_id)
+
+        payload = {
+            'schemas': ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+            'operations': [
+                {
+                    'op': 'add',
+                    'path': 'oidcIds',
+                    'value': {
+                        "urn:indigo-dc:scim:schemas:IndigoUser": {
+                            "oidcIds": [oidc_id]
+                        }
+                    }
+                }]
+        }
+
+        headers = {'Content-type': 'application/scim+json'}
+        r = self._s.patch(url, headers=headers, json=payload)
+        r.raise_for_status()
+
     def _base_url(self):
         return "%s://%s:%d" % (self._protocol, self._host, self._port)
 
@@ -453,11 +579,14 @@ class IamService:
         self._s = requests.Session()
         self._s.headers.update(self._build_authz_header())
 
-    def __init__(self, host, port, vo, protocol="https"):
+    def __init__(self, host, port, vo, protocol="https", username_attr=None, link_cern_sso=False):
+
         self._host = host
         self._port = port
         self._protocol = protocol
         self._vo = vo
+        self._username_attr = username_attr
+        self._link_cern_sso = link_cern_sso
         self._load_token()
         self._init_session()
 
@@ -470,7 +599,9 @@ class VomsImporter:
             host=args.voms_host, port=args.voms_port, vo=args.vo)
 
         self._iam_service = IamService(
-            host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol)
+            host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
+            username_attr=args.username_attr, link_cern_sso=args.link_cern_sso)
+
         self._import_id = uuid.uuid4()
 
     def visit_voms_groups(self, group, fn=None):
@@ -486,35 +617,49 @@ class VomsImporter:
     def migrate_voms_group(self, group):
         if not self._iam_service.has_voms_group(group):
             self._iam_service.import_voms_group(group)
+        else:
+            logging.info("Group %s already present", group)
 
     def import_voms_groups(self):
-        logging.debug("Importing VOMS groups")
+        logging.info("Importing VOMS groups")
         groups = self._voms_service.get_root_groups()
         self.visit_voms_groups(groups[0], self.migrate_voms_group)
 
     def import_voms_roles(self):
-        logging.debug("Importing VOMS roles")
+        logging.info("Importing VOMS roles")
         roles = self._voms_service.get_roles()
         for r in roles:
             self._iam_service.import_voms_role(r)
 
     def import_voms_users(self):
-        logging.debug("Importing VOMS users")
+        logging.info("Importing VOMS users")
         r = self._voms_service.get_voms_users(pagesize=1)
-        logging.debug("VOMS users count: %d", r['count'])
-        start = 0
+
+        start = self._args.start_index
+        logging.info(
+            "VOMS users count: %d. Starting from index %d", r['count'], start)
         pagesize = 100
+        import_count = 0
         while True:
             r = self._voms_service.get_voms_users(
                 pagesize=pagesize, start=start)
             for u in r['result']:
                 self._iam_service.import_voms_user(u)
+                import_count = import_count + 1
+                if self._args.count > 0 and import_count >= self._args.count:
+                    logging.info(
+                        "Breaking after %d imported users as requested", import_count)
+                    return
             if (r['startIndex']+r['pageSize'] < r['count']):
                 start = r['startIndex'] + r['pageSize']
             else:
                 break
 
+    def print_voms_accounts_sharing_email(self):
+        self._voms_service.print_voms_accounts_sharing_email()
+
     def run_import(self):
+        self.print_voms_accounts_sharing_email()
         logging.info("VOMS importer run id: %s", self._import_id)
         self.import_voms_groups()
         self.import_voms_roles()
@@ -542,11 +687,19 @@ def init_argparse():
                         help="The IAM port", dest="iam_port", default=443)
     parser.add_argument('--iam-protocol', required=False, type=str,
                         help="The protocol used to talk to IAM", dest="iam_protocol", default="https")
+    parser.add_argument('--start-index', required=False, type=int,
+                        help="Start from this index when syncing users", dest="start_index", default=0)
+    parser.add_argument('--count', required=False, type=int,
+                        help="Import at most 'count' user records", dest="count", default=-1)
+    parser.add_argument('--username-attr', required=False, type=str,
+                        help="Uses the VOMS GA passed as argument for building the username", dest="username_attr", default=None)
+    parser.add_argument('--link-cern-sso', required=False,
+                        help="Creates a CERN SSO account link from the 'nickname' VOMS GA", default=False, action="store_true", dest="link_cern_sso")
     return parser
 
 
 def init_logging(args):
-    level = logging.WARN
+    level = logging.INFO
     if args.debug:
         level = logging.DEBUG
 

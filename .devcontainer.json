@@ -1,0 +1,7 @@
+{
+  "name": "VOMS importer",
+  "dockerComposeFile": "compose/docker-compose.yml",
+  "service": "importer",
+  "workspaceFolder": "/home/test/workspace",
+  "shutdownAction": "stopCompose"
+}
