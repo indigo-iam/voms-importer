@@ -9,6 +9,7 @@ services:
       - TZ=Europe/Rome
       - BEARER_TOKEN
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/cert.pem
+      - X509_USER_PROXY=/tmp/x509up_u501
 
     volumes:
       - $HOME/git/indigo-aai-tutorial:/home/test/indigo-aai-tutorial
