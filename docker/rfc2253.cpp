@@ -1,4 +1,4 @@
-// compile with: g++ -std=c++14 rfc2553.cpp -lcrypto -lssl
+// compile with: g++ -std=c++14 rfc2253.cpp -lcrypto -lssl
 
 #include <openssl/x509.h>
 #include <iostream>
@@ -13,6 +13,12 @@ std::string to_rfc2253(std::string const& name);
 int main(int argc, char* argv[])
 {
   program_name = argv[0];
+
+  int ret = ASN1_STRING_TABLE_add(NID_organizationName, -1, 128, 0, 0);
+  if (ret == 0) {
+    std::cerr << "Cannot change length limits of Organization Name\n";
+    return EXIT_FAILURE;
+  }
 
   if (argc == 1) {
     std::string name;
