@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+person_id=$1
+ldap_host=$2
+ldap_port=$3
+
+ldapsearch -x -h ${ldap_host} -p ${ldap_port} -b 'DC=cern,DC=ch' "(&(employeeID=${person_id})(employeeType=Primary))" cn | grep '^cn:' | sed 's/cn: //'

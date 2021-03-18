@@ -12,6 +12,7 @@ ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
 COPY --from=builder /root/dn_converter /usr/local/bin/dn_converter
+ADD ./resolve_cern_login /usr/local/bin/resolve_cern_login
 
 ENV TEST_USER $TEST_USER
 ENV TEST_USER_UID $TEST_USER_UID
@@ -22,7 +23,7 @@ RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py > get-pip.py && \
   yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-externals-rpm/centos7/python2-zsi-2.1-16.el7.noarch.rpm && \
   yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-rpm-stable/centos7/voms-admin-client-2.0.20-1.el7.noarch.rpm 
 
-RUN yum -y install openssl git which hostname epel-release sudo file wget && \
+RUN yum -y install openldap openldap-clients openssl git which hostname epel-release sudo file wget && \
       echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
       adduser --uid ${TEST_USER_UID} ${TEST_USER} && \
       usermod -a -G wheel ${TEST_USER} && \
@@ -31,6 +32,7 @@ RUN yum -y install openssl git which hostname epel-release sudo file wget && \
       yum -y install igi-test-ca && \
       yum -y install voms-clients-java && \
       yum -y install https://github.com/indigo-dc/oidc-agent/releases/download/v3.3.5/oidc-agent-3.3.5-1.el7.x86_64.rpm && \
+      yum -y install haveged && \
       yum clean all && \
       rm -rf /var/cache/yum
 

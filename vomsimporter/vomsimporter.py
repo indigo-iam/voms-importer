@@ -12,7 +12,8 @@ os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
 
 
 def convert_dn_rfc2253(dn):
-    rfc_dn = subprocess.check_output(["dn_converter", dn]).replace("\n", "")
+    rfc_dn = subprocess.check_output(
+        ["dn_converter", dn]).replace("\n", "")
     return rfc_dn
 
 
@@ -516,6 +517,19 @@ class IamService:
                 logging.info('Skipping certificate %s as is suspended' % c)
                 continue
 
+            converted_subject = convert_dn_rfc2253(c['subjectString'])
+            converted_issuer = convert_dn_rfc2253(c['issuerString'])
+
+            if len(converted_subject) == 0:
+                logging.error(
+                    "DN conversion failed for subject %s, skipping certificate import", c['subjectString'])
+                continue
+
+            if len(converted_issuer) == 0:
+                logging.error(
+                    "DN conversion failed for issuer %s, skipping certificate import", c['issuerString'])
+                continue
+
             cert = {
                 "label": "cert-%d" % cert_idx,
                 "subjectDn": convert_dn_rfc2253(c['subjectString']),
@@ -529,13 +543,29 @@ class IamService:
                          iam_user_str, voms_user['cernHrId'])
             self.add_cern_person_id_label(iam_user, voms_user['cernHrId'])
 
-        if self._link_cern_sso:
-            self.create_cern_sso_account_link(voms_user, iam_user)
+            if self._link_cern_sso:
+                cern_login = self.resolve_cern_login_from_attributes(voms_user)
+                self.create_cern_sso_account_link(
+                    voms_user, iam_user, cern_login)
+            elif self._link_cern_sso_ldap:
+                cern_login = self.resolve_cern_login_from_ldap(voms_user)
+                self.create_cern_sso_account_link(
+                    voms_user, iam_user, cern_login)
 
-    def create_cern_sso_account_link(self, voms_user, iam_user):
-        url = "%s://%s/scim/Users/%s" % (self._protocol,
-                                         self._host, iam_user['id'])
+    def resolve_cern_login_from_ldap(self, voms_user):
+        cern_login = subprocess.check_output(["resolve_cern_login", str(voms_user[
+            'cernHrId']), self._ldap_host, self._ldap_port]).replace("\n", "").strip()
 
+        if len(cern_login) == 0:
+            logging.warn("CERN login resolution failed for personId %s", voms_user[
+                'cernHrId'])
+            return None
+
+        logging.info("CERN login resolved via LDAP: personId %s => %s", voms_user[
+            'cernHrId'], cern_login)
+        return cern_login
+
+    def resolve_cern_login_from_attributes(self, voms_user):
         nickname = None
         for attr in voms_user['attributes']:
             if attr['name'] == 'nickname':
@@ -544,11 +574,15 @@ class IamService:
         if not nickname:
             logging.warn("No nickname defined for voms user %s -> No CERN SSO account link" %
                          voms_user['id'])
-            return
+            return None
+
+    def create_cern_sso_account_link(self, voms_user, iam_user, cern_login):
+        url = "%s://%s/scim/Users/%s" % (self._protocol,
+                                         self._host, iam_user['id'])
 
         oidc_id = {
             'issuer': 'https://auth.cern.ch/auth/realms/cern',
-            'subject': nickname
+            'subject': cern_login
         }
 
         logging.info("Linking user %s to CERN SSO account %s",
@@ -579,7 +613,7 @@ class IamService:
         self._s = requests.Session()
         self._s.headers.update(self._build_authz_header())
 
-    def __init__(self, host, port, vo, protocol="https", username_attr=None, link_cern_sso=False):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False):
 
         self._host = host
         self._port = port
@@ -587,6 +621,9 @@ class IamService:
         self._vo = vo
         self._username_attr = username_attr
         self._link_cern_sso = link_cern_sso
+        self._link_cern_sso_ldap = link_cern_sso_ldap
+        self._ldap_host = ldap_host
+        self._ldap_port = ldap_port
         self._load_token()
         self._init_session()
 
@@ -600,7 +637,8 @@ class VomsImporter:
 
         self._iam_service = IamService(
             host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
-            username_attr=args.username_attr, link_cern_sso=args.link_cern_sso)
+            username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
+            link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port)
 
         self._import_id = uuid.uuid4()
 
@@ -646,6 +684,7 @@ class VomsImporter:
             for u in r['result']:
                 self._iam_service.import_voms_user(u)
                 import_count = import_count + 1
+                logging.info("Import count: %d", import_count)
                 if self._args.count > 0 and import_count >= self._args.count:
                     logging.info(
                         "Breaking after %d imported users as requested", import_count)
@@ -659,11 +698,19 @@ class VomsImporter:
         self._voms_service.print_voms_accounts_sharing_email()
 
     def run_import(self):
-        self.print_voms_accounts_sharing_email()
         logging.info("VOMS importer run id: %s", self._import_id)
-        self.import_voms_groups()
-        self.import_voms_roles()
-        self.import_voms_users()
+
+        if not self._args.skip_duplicate_accounts_check:
+            self.print_voms_accounts_sharing_email()
+
+        if not self._args.skip_groups_import:
+            self.import_voms_groups()
+
+        if not self._args.skip_roles_import:
+            self.import_voms_roles()
+
+        if not self._args.skip_users_import:
+            self.import_voms_users()
 
 
 def error_and_exit(msg):
@@ -675,6 +722,14 @@ def init_argparse():
     parser = argparse.ArgumentParser(prog='vomsimporter')
     parser.add_argument('--debug', required=False, default=False,
                         action="store_true", dest="debug", help="Turns on debug logging")
+    parser.add_argument('--skip-duplicate-accounts-checks', required=False, default=False,
+                        action="store_true", dest="skip_duplicate_accounts_check", help="Skips duplicate account checks")
+    parser.add_argument('--skip-groups-import', required=False, default=False,
+                        action="store_true", dest="skip_groups_import", help="Skips groups import")
+    parser.add_argument('--skip-roles-import', required=False, default=False,
+                        action="store_true", dest="skip_roles_import", help="Skips roles import")
+    parser.add_argument('--skip-users-import', required=False, default=False,
+                        action="store_true", dest="skip_users_import", help="Skips users import")
     parser.add_argument('--vo', required=True, type=str,
                         help="The VO to be migrated", dest="vo")
     parser.add_argument('--voms-host', required=True, type=str,
@@ -695,6 +750,13 @@ def init_argparse():
                         help="Uses the VOMS GA passed as argument for building the username", dest="username_attr", default=None)
     parser.add_argument('--link-cern-sso', required=False,
                         help="Creates a CERN SSO account link from the 'nickname' VOMS GA", default=False, action="store_true", dest="link_cern_sso")
+    parser.add_argument('--link-cern-sso-ldap', required=False,
+                        help="Creates a CERN SSO account link resolving the CERN login using CERNs ldap", default=False, action="store_true", dest="link_cern_sso_ldap")
+    parser.add_argument('--cern-ldap-host', required=False,
+                        help="CERN ldap host", default="xldap.cern.ch", type=str, dest="cern_ldap_host")
+    parser.add_argument('--cern-ldap-port', required=False,
+                        help="CERN ldap port", default="389", type=str, dest="cern_ldap_port")
+
     return parser
 
 

@@ -1,9 +1,21 @@
 version: '3.5'
 
+volumes:
+  vscode-server:
+
 services:
+
+  importer-init:
+    image: indigoiam/voms-importer
+    volumes:
+      - vscode-server:/home/test/.vscode-server
+    command: sudo chown -R test:test /home/test/.vscode-server
 
   importer:
     image: indigoiam/voms-importer
+
+    depends_on:
+      - importer-init
 
     environment:
       - TZ=Europe/Rome
@@ -12,6 +24,7 @@ services:
       - X509_USER_PROXY=/tmp/x509up_u501
 
     volumes:
+      - vscode-server:/home/test/.vscode-server
       - $HOME/git/indigo-aai-tutorial:/home/test/indigo-aai-tutorial
       - $HOME/grid-security:/etc/grid-security/certificates
       - $HOME/ca-bundle:/etc/pki
