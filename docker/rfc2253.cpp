@@ -14,11 +14,13 @@ int main(int argc, char* argv[])
 {
   program_name = argv[0];
 
+/* this causes a segfault on centos 7
   int ret = ASN1_STRING_TABLE_add(NID_organizationName, -1, 128, 0, 0);
   if (ret == 0) {
     std::cerr << "Cannot change length limits of Organization Name\n";
     return EXIT_FAILURE;
   }
+*/
 
   if (argc == 1) {
     std::string name;

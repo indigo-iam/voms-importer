@@ -2,6 +2,7 @@ version: '3.5'
 
 volumes:
   vscode-server:
+  dotlocal:
 
 services:
 
@@ -9,7 +10,8 @@ services:
     image: indigoiam/voms-importer
     volumes:
       - vscode-server:/home/test/.vscode-server
-    command: sudo chown -R test:test /home/test/.vscode-server
+      - dotlocal:/home/test/.local
+    command: sudo chown -R test:test /home/test/.vscode-server /home/test/.local
 
   importer:
     image: indigoiam/voms-importer
@@ -25,6 +27,7 @@ services:
 
     volumes:
       - vscode-server:/home/test/.vscode-server
+      - dotlocal:/home/test/.local
       - $HOME/git/indigo-aai-tutorial:/home/test/indigo-aai-tutorial
       - $HOME/grid-security:/etc/grid-security/certificates
       - $HOME/ca-bundle:/etc/pki

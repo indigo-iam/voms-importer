@@ -27,7 +27,7 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
       echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
       adduser --uid ${TEST_USER_UID} ${TEST_USER} && \
       usermod -a -G wheel ${TEST_USER} && \
-      yum -y install jq && \
+      yum -y install nc jq java-11-openjdk && \
       wget https://ci.cloud.cnaf.infn.it/view/repos/job/repo_test_ca/lastSuccessfulBuild/artifact/test-ca.repo -O /etc/yum.repos.d/test-ca.repo && \
       yum -y install igi-test-ca && \
       yum -y install voms-clients-java && \
@@ -40,6 +40,9 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
 ENV TINI_VERSION v0.18.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
+ADD ./convert_dn /usr/local/bin
+ADD ./dn-converter-0.0.1-SNAPSHOT.jar /home/$TEST_USER
+RUN chown $TEST_USER:$TEST_USER /home/$TEST_USER/dn-converter-0.0.1-SNAPSHOT.jar
 
 ENTRYPOINT ["/tini", "--"]
 USER $TEST_USER

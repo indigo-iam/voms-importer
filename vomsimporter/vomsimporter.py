@@ -13,7 +13,7 @@ os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
 
 def convert_dn_rfc2253(dn):
     rfc_dn = subprocess.check_output(
-        ["dn_converter", dn]).replace("\n", "")
+        ["convert_dn", dn]).replace("\n", "")
     return rfc_dn
 
 
@@ -530,6 +530,8 @@ class IamService:
                     "DN conversion failed for issuer %s, skipping certificate import", c['issuerString'])
                 continue
 
+            logging.info("Converted certificate info: '%s', '%s'",
+                         converted_subject, converted_issuer)
             cert = {
                 "label": "cert-%d" % cert_idx,
                 "subjectDn": convert_dn_rfc2253(c['subjectString']),
@@ -703,14 +705,15 @@ class VomsImporter:
         if not self._args.skip_duplicate_accounts_check:
             self.print_voms_accounts_sharing_email()
 
-        if not self._args.skip_groups_import:
-            self.import_voms_groups()
+        if not self._args.skip_import:
+            if not self._args.skip_groups_import:
+                self.import_voms_groups()
 
-        if not self._args.skip_roles_import:
-            self.import_voms_roles()
+            if not self._args.skip_roles_import:
+                self.import_voms_roles()
 
-        if not self._args.skip_users_import:
-            self.import_voms_users()
+            if not self._args.skip_users_import:
+                self.import_voms_users()
 
 
 def error_and_exit(msg):
@@ -724,6 +727,8 @@ def init_argparse():
                         action="store_true", dest="debug", help="Turns on debug logging")
     parser.add_argument('--skip-duplicate-accounts-checks', required=False, default=False,
                         action="store_true", dest="skip_duplicate_accounts_check", help="Skips duplicate account checks")
+    parser.add_argument('--skip-import', required=False, default=False,
+                        action="store_true", dest="skip_import", help="Skips import")
     parser.add_argument('--skip-groups-import', required=False, default=False,
                         action="store_true", dest="skip_groups_import", help="Skips groups import")
     parser.add_argument('--skip-roles-import', required=False, default=False,
