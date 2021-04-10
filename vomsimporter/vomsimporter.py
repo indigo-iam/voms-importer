@@ -9,11 +9,12 @@ import subprocess
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
 os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
+DN_CONVERTER_COMMAND = "dn_converter"
 
 
 def convert_dn_rfc2253(dn):
     rfc_dn = subprocess.check_output(
-        ["convert_dn", dn]).replace("\n", "")
+        [DN_CONVERTER_COMMAND, dn]).replace("\n", "")
     return rfc_dn
 
 
@@ -474,9 +475,18 @@ class IamService:
                 if not voms_id_label:
                     logging.warning("IAM account found matching VOMS user %s email: %s. Will import information on that account",
                                     user_desc, voms_user['emailAddress'])
+
                 else:
                     logging.warning("IAM account found matching VOMS user %s email: %s AND matching formerly imported VOMS user account %s. Will import information on that account",
                                     user_desc, voms_user['emailAddress'], voms_id_label['value'])
+
+                    if self._merge_accounts:
+                        logging.warning("IAM account found matching VOMS user %s email: %s AND matching formerly imported VOMS user account %s. Will import information on that account (--merge-accounts=True)",
+                                        user_desc, voms_user['emailAddress'], voms_id_label['value'])
+                    else:
+                        logging.warning("IAM account found matching VOMS user %s email: %s AND matching formerly imported VOMS user account %s. Will NOT import information for this account (--merge-accounts=False)",
+                                        user_desc, voms_user['emailAddress'], voms_id_label['value'])
+                        return
 
         # IAM account not found for voms id or email, create one
         if not iam_user:
@@ -615,7 +625,7 @@ class IamService:
         self._s = requests.Session()
         self._s.headers.update(self._build_authz_header())
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False):
 
         self._host = host
         self._port = port
@@ -626,6 +636,7 @@ class IamService:
         self._link_cern_sso_ldap = link_cern_sso_ldap
         self._ldap_host = ldap_host
         self._ldap_port = ldap_port
+        self._merge_accounts = merge_accounts
         self._load_token()
         self._init_session()
 
@@ -640,7 +651,7 @@ class VomsImporter:
         self._iam_service = IamService(
             host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
-            link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port)
+            link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port, merge_accounts=args.merge_accounts)
 
         self._import_id = uuid.uuid4()
 
@@ -761,7 +772,8 @@ def init_argparse():
                         help="CERN ldap host", default="xldap.cern.ch", type=str, dest="cern_ldap_host")
     parser.add_argument('--cern-ldap-port', required=False,
                         help="CERN ldap port", default="389", type=str, dest="cern_ldap_port")
-
+    parser.add_argument('--merge-accounts', required=False,
+                        help="Merge account information for accounts sharing the email address", default=False, dest="merge_accounts")
     return parser
 
 

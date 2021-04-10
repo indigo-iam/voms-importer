@@ -1,9 +1,9 @@
 FROM centos:7 as builder
 
-ADD rfc2253.cpp /root
+ADD rfc2253 /root/rfc2253
 
 RUN yum -y install gcc-c++ openssl-devel
-RUN cd /root && c++ --version && c++ --std=c++11 -lcrypto -lssl -o dn_converter rfc2253.cpp
+RUN cd /root/rfc2253 && c++ --version && c++ --std=c++11 -lcrypto -lssl -o dn_converter rfc2253.cpp
 
 FROM centos:7
 
@@ -11,7 +11,7 @@ FROM centos:7
 ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
-COPY --from=builder /root/dn_converter /usr/local/bin/dn_converter
+COPY --from=builder /root/rfc2253/dn_converter /usr/local/bin/dn_converter
 ADD ./resolve_cern_login /usr/local/bin/resolve_cern_login
 
 ENV TEST_USER $TEST_USER
