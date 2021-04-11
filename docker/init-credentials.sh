@@ -37,7 +37,7 @@ curl -s -XPOST -H "Authorization: Bearer ${BT}" \
         -d client_id=${client_id} \
         -d client_secret=${client_secret} \
         -d lifetimeSecs=${PROXY_CERT_LIFETIME_SECS} \
-        ${IAM_PROXYCERT_ENDPOINT} > ${proxyresponse}
+        ${IAM_ENDPOINT}/iam/proxycert > ${proxyresponse}
 
 if [ $? -ne 0 ]; then
     echo "Error requesting proxy certificate"
@@ -63,9 +63,7 @@ echo "A proxy certificate for identity:"
 echo
 echo ${identity}
 echo
-echo "has been saved to:"
-echo
-echo ${proxy_file}
+echo "has been saved to: ${proxy_file}"
 
 voms-proxy-info -all
 
@@ -73,3 +71,6 @@ BT=$(oidc-token -s openid ${OIDC_AGENT_ALIAS})
 BEARER_TOKEN_FILE=/tmp/bt_u$(id -u)
 touch ${BEARER_TOKEN_FILE} && chmod 600 ${BEARER_TOKEN_FILE}
 echo ${BT} > ${BEARER_TOKEN_FILE}
+
+echo 
+echo "A bearer token has been saved to: ${BEARER_TOKEN_FILE}" 
