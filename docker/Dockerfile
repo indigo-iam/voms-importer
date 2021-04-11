@@ -50,7 +50,6 @@ RUN chown $TEST_USER:$TEST_USER /home/$TEST_USER/dn-converter-0.0.1-SNAPSHOT.jar
 ENTRYPOINT ["/tini", "--", "/usr/local/bin/vomsimporter"]
 CMD ["--help"]
 
+RUN chmod -R go+rwx /home/$TEST_USER
 USER $TEST_USER
 WORKDIR /home/$TEST_USER
-ENV X509_USER_PROXY /tmp/x509up_u$TEST_USER_UID
-ENV BEARER_TOKEN_FILE /tmp/bt_u$TEST_USER_UID
