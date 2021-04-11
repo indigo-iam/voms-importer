@@ -42,8 +42,15 @@ ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 ADD ./convert_dn /usr/local/bin
 ADD ./dn-converter-0.0.1-SNAPSHOT.jar /home/$TEST_USER
+COPY ./init-credentials.sh /usr/local/bin/init-credentials.sh
+COPY ./vomsimporter.py /usr/local/bin/vomsimporter
+RUN chmod 755 /usr/local/bin/vomsimporter
 RUN chown $TEST_USER:$TEST_USER /home/$TEST_USER/dn-converter-0.0.1-SNAPSHOT.jar
 
-ENTRYPOINT ["/tini", "--"]
+ENTRYPOINT ["/tini", "--", "/usr/local/bin/vomsimporter"]
+CMD ["--help"]
+
 USER $TEST_USER
 WORKDIR /home/$TEST_USER
+ENV X509_USER_PROXY /tmp/x509up_u$TEST_USER_UID
+ENV BEARER_TOKEN_FILE /tmp/bt_u$TEST_USER_UID
