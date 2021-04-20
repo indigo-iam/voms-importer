@@ -528,8 +528,13 @@ class IamService:
                 logging.info('Skipping certificate %s as is suspended' % c)
                 continue
 
-            converted_subject = convert_dn_rfc2253(c['subjectString'])
-            converted_issuer = convert_dn_rfc2253(c['issuerString'])
+            try:
+                converted_subject = convert_dn_rfc2253(c['subjectString'])
+                converted_issuer = convert_dn_rfc2253(c['issuerString'])
+            except Exception as e:
+                logging.warn(
+                    "DN conversion failed with exception %s, skipping certificate import", e)
+                continue
 
             if len(converted_subject) == 0:
                 logging.error(
