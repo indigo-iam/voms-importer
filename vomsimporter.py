@@ -108,47 +108,6 @@ class VomsService:
         r.raise_for_status()
         return r.json()
 
-    def print_voms_accounts_sharing_email(self):
-        logging.info("Looking for accounts sharing email addresses...")
-        email_map = {}
-
-        pagesize = 300
-        start = 0
-        while True:
-            r = self.get_voms_users(
-                pagesize=pagesize, start=start)
-
-            logging.info("Processing %d VOMS users (out of %d)",
-                         start, r['count'])
-
-            for u in r['result']:
-                if u['suspended']:
-                    logging.debug("Skipping suspended account %s", u['id'])
-                    continue
-
-                if email_map.has_key(u['emailAddress']):
-                    email_map[u['emailAddress']].append(u['id'])
-                else:
-                    email_map[u['emailAddress']] = [u['id']]
-
-            if (r['startIndex']+r['pageSize'] < r['count']):
-                start = r['startIndex'] + r['pageSize']
-            else:
-                break
-
-        num_accounts_sharing_email = 0
-        for k in email_map.keys():
-            if len(email_map[k]) > 1:
-                num_accounts_sharing_email = num_accounts_sharing_email + \
-                    len(email_map[k])
-
-        logging.info(
-            "%d accounts found sharing email address with another account", num_accounts_sharing_email)
-
-        for k in email_map.keys():
-            if len(email_map[k]) > 1:
-                logging.info("%s => voms user ids: %s", k, email_map[k])
-
 
 class IamError(Exception):
     pass
@@ -631,7 +590,7 @@ class IamService:
         self._s = requests.Session()
         self._s.headers.update(self._build_authz_header())
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None):
 
         self._host = host
         self._port = port
@@ -643,6 +602,7 @@ class IamService:
         self._ldap_host = ldap_host
         self._ldap_port = ldap_port
         self._merge_accounts = merge_accounts
+        self._email_update = dict([(int(vomsid), mail) for vomsid, mail in (line.strip().split(';', 1) for line in open(email_mapfile).readlines())]) if email_mapfile else {}
         self._load_token()
         self._init_session()
 
@@ -657,7 +617,8 @@ class VomsImporter:
         self._iam_service = IamService(
             host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
-            link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port, merge_accounts=args.merge_accounts)
+            link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
+            merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile)
 
         self._import_id = uuid.uuid4()
 
@@ -701,6 +662,8 @@ class VomsImporter:
             r = self._voms_service.get_voms_users(
                 pagesize=pagesize, start=start)
             for u in r['result']:
+                if u['id'] in self._email_update:
+                    u['emailAddress'] = self._email_update[u['id']]
                 self._iam_service.import_voms_user(u)
                 import_count = import_count + 1
                 logging.info("Import count: %d", import_count)
@@ -714,7 +677,48 @@ class VomsImporter:
                 break
 
     def print_voms_accounts_sharing_email(self):
-        self._voms_service.print_voms_accounts_sharing_email()
+        logging.info("Looking for accounts sharing email addresses...")
+        email_map = {}
+
+        pagesize = 300
+        start = 0
+        while True:
+            r = self._voms_service.get_voms_users(
+                pagesize=pagesize, start=start)
+
+            logging.info("Processing %d VOMS users (out of %d)",
+                         start, r['count'])
+
+            for u in r['result']:
+                if u['suspended']:
+                    logging.debug("Skipping suspended account %s", u['id'])
+                    continue
+
+                if u['id'] in self._email_update:
+                    u['emailAddress'] = self._email_update[u['id']]
+
+                if email_map.has_key(u['emailAddress']):
+                    email_map[u['emailAddress']].append(u['id'])
+                else:
+                    email_map[u['emailAddress']] = [u['id']]
+
+            if (r['startIndex']+r['pageSize'] < r['count']):
+                start = r['startIndex'] + r['pageSize']
+            else:
+                break
+
+        num_accounts_sharing_email = 0
+        for k in email_map.keys():
+            if len(email_map[k]) > 1:
+                num_accounts_sharing_email = num_accounts_sharing_email + \
+                    len(email_map[k])
+
+        logging.info(
+            "%d accounts found sharing email address with another account", num_accounts_sharing_email)
+
+        for k in email_map.keys():
+            if len(email_map[k]) > 1:
+                logging.info("%s => voms user ids: %s", k, email_map[k])
 
     def run_import(self):
         logging.info("VOMS importer run id: %s", self._import_id)
@@ -780,6 +784,8 @@ def init_argparse():
                         help="CERN ldap port", default="389", type=str, dest="cern_ldap_port")
     parser.add_argument('--merge-accounts', required=False,
                         help="Merge account information for accounts sharing the email address", default=False, dest="merge_accounts")
+    parser.add_argument('--email-mapfile', required=False,
+                        help="File with 'vomsid;email@address' to allow duplicate email overwrite", default=None, dest="email_mapfile")
     return parser
 
 
