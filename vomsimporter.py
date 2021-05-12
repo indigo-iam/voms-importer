@@ -6,6 +6,7 @@ import sys
 import uuid
 import requests
 import subprocess
+import csv
 
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
@@ -105,6 +106,14 @@ class VomsService:
 
         r = self._session.get(
             url, params={'startIndex': start, 'pageSize': pagesize})
+        r.raise_for_status()
+        return r.json()
+
+    def get_voms_user(self, uid):
+        logging.debug("Loading VOMS user by id: %d", uid)
+        url = "https://%s:8443/voms/%s/apiv2/user-info" % (
+            self._host, self._vo)
+        r = self._session.get(url, params={'userId': uid})
         r.raise_for_status()
         return r.json()
 
@@ -340,8 +349,21 @@ class IamService:
                 }]
         }
         headers = {'Content-type': 'application/scim+json'}
-        r = self._s.patch(url, headers=headers, json=payload)
-        r.raise_for_status()
+        try:
+            r = self._s.patch(url, headers=headers, json=payload)
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("Error linking certificate: %s to account %s: %s",
+                              cert, iam_user['id'], e)
+                sys.exit(1)
+            elif e.response.status_code == 409:
+                logging.warning("Error linking certificate: %s to account %s: %s",
+                                cert, iam_user['id'], e.response.content)
+            else:
+                logging.error("Error linking certificate: %s to account %s: %s",
+                              cert, iam_user['id'], e.response.content)
+                sys.exit(1)
 
     def set_user_attribute(self, iam_user, attribute):
         url = "%s://%s/iam/account/%s/attributes" % (self._protocol,
@@ -417,6 +439,11 @@ class IamService:
                                     voms_user['surname'])
 
         logging.info("Importing VOMS user: %s", user_desc)
+        if self.has_email_override(voms_user['id']):
+            overridden_email = self.email_override(voms_user['id'])
+            logging.info("Overriding email for VOMS user: %d : %s => %s",
+                         voms_user['id'], voms_user['emailAddress'], overridden_email)
+            voms_user['emailAddress'] = overridden_email
 
         if voms_user['suspended']:
             logging.info("Skipping suspended user %s", user_desc)
@@ -581,7 +608,18 @@ class IamService:
 
         headers = {'Content-type': 'application/scim+json'}
         r = self._s.patch(url, headers=headers, json=payload)
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("CERN SSO link failed: %s", e)
+                sys.exit(1)
+            elif e.response.status_code == 409:
+                logging.warning(
+                    "CERN SSO link failed with a conflict error: %s", e.response.content)
+            else:
+                logging.error("CERN SSO link failed: %s", e.response.content)
+                sys.exit(1)
 
     def _base_url(self):
         return "%s://%s:%d" % (self._protocol, self._host, self._port)
@@ -589,6 +627,26 @@ class IamService:
     def _init_session(self):
         self._s = requests.Session()
         self._s.headers.update(self._build_authz_header())
+
+    def has_email_override(self, uid):
+        return self._email_override.has_key(uid)
+
+    def email_override(self, uid):
+        return self._email_override[uid]
+
+    def _load_email_override_csv_file(self, email_mapfile):
+        self._email_override = {}
+        logging.info(
+            "Loading email override map file from: %s", email_mapfile)
+
+        with open(email_mapfile) as csvfile:
+            reader = csv.DictReader(
+                csvfile, fieldnames=['id', 'email'], delimiter=';')
+
+            for r in reader:
+                logging.info("Adding email override for VOMS user id: %s => %s",
+                             r['id'], r['email'])
+                self._email_override[int(r['id'])] = r['email']
 
     def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None):
 
@@ -602,7 +660,12 @@ class IamService:
         self._ldap_host = ldap_host
         self._ldap_port = ldap_port
         self._merge_accounts = merge_accounts
-        self._email_update = dict([(int(vomsid), mail) for vomsid, mail in (line.strip().split(';', 1) for line in open(email_mapfile).readlines())]) if email_mapfile else {}
+        self._email_override = {}
+        self._import_id_list = None
+
+        if email_mapfile:
+            self._load_email_override_csv_file(email_mapfile)
+
         self._load_token()
         self._init_session()
 
@@ -621,6 +684,21 @@ class VomsImporter:
             merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile)
 
         self._import_id = uuid.uuid4()
+        self._voms_user_ids = []
+
+        if args.id_file:
+            self._load_id_file(args.id_file)
+
+    def _load_id_file(self, id_file):
+        logging.info(
+            "Loading import id list from file: %s", id_file)
+
+        with open(id_file) as idfile:
+            reader = csv.DictReader(idfile, fieldnames=['id'])
+            for r in reader:
+                logging.info(
+                    "Adding VOMS user id: %d to the import list", int(r['id']))
+                self._voms_user_ids.append(int(r['id']))
 
     def visit_voms_groups(self, group, fn=None):
         if fn:
@@ -649,6 +727,18 @@ class VomsImporter:
         for r in roles:
             self._iam_service.import_voms_role(r)
 
+    def import_voms_users_list(self):
+        logging.info("Importing VOMS users from user id list")
+        import_count = 0
+        for id in self._voms_user_ids:
+            u = self._voms_service.get_voms_user(id)
+            self._iam_service.import_voms_user(u)
+            logging.info("Import count: %d", import_count)
+            if self._args.count > 0 and import_count >= self._args.count:
+                logging.info(
+                    "Breaking after %d imported users as requested", import_count)
+                return
+
     def import_voms_users(self):
         logging.info("Importing VOMS users")
         r = self._voms_service.get_voms_users(pagesize=1)
@@ -662,8 +752,6 @@ class VomsImporter:
             r = self._voms_service.get_voms_users(
                 pagesize=pagesize, start=start)
             for u in r['result']:
-                if u['id'] in self._email_update:
-                    u['emailAddress'] = self._email_update[u['id']]
                 self._iam_service.import_voms_user(u)
                 import_count = import_count + 1
                 logging.info("Import count: %d", import_count)
@@ -694,8 +782,9 @@ class VomsImporter:
                     logging.debug("Skipping suspended account %s", u['id'])
                     continue
 
-                if u['id'] in self._email_update:
-                    u['emailAddress'] = self._email_update[u['id']]
+                if self._iam_service.has_email_override(u['id']):
+                    u['emailAddress'] = self._iam_service.email_override(
+                        u['id'])
 
                 if email_map.has_key(u['emailAddress']):
                     email_map[u['emailAddress']].append(u['id'])
@@ -734,7 +823,10 @@ class VomsImporter:
                 self.import_voms_roles()
 
             if not self._args.skip_users_import:
-                self.import_voms_users()
+                if len(self._voms_user_ids) > 0:
+                    self.import_voms_users_list()
+                else:
+                    self.import_voms_users()
 
 
 def error_and_exit(msg):
@@ -786,6 +878,9 @@ def init_argparse():
                         help="Merge account information for accounts sharing the email address", default=False, dest="merge_accounts")
     parser.add_argument('--email-mapfile', required=False,
                         help="File with 'vomsid;email@address' to allow duplicate email overwrite", default=None, dest="email_mapfile")
+
+    parser.add_argument('--id-file', required=False,
+                        help="Limits import to VOMS users matching whose id is listed in the file (one id per line).", default=None, dest="id_file")
     return parser
 
 

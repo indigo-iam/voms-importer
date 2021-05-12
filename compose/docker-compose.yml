@@ -37,6 +37,7 @@ services:
       - $HOME/.globus:/home/test/.globus:ro
       - $HOME/.config/oidc-agent:/home/test/.config/oidc-agent:ro
       - ..:/home/test/workspace:cached
+      - /dev/urandom:/dev/random
 
     entrypoint: /tini -- sleep infinity
 
