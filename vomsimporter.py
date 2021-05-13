@@ -395,6 +395,14 @@ class IamService:
         r = self._s.put(label_url, json=label)
         r.raise_for_status()
 
+    def add_skip_email_synch_label(self, iam_user):
+        label = {
+            'prefix': 'hr.cern',
+            'name': 'skip-email-synch'
+        }
+
+        self.add_user_label(iam_user, label)
+
     def add_cern_person_id_label(self, iam_user, person_id):
         label = {
             'prefix': 'hr.cern',
@@ -482,6 +490,10 @@ class IamService:
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
                      iam_user_str)
+
+        if self.has_email_override(voms_user['id']):
+            logging.info("User has email override, disable HR email sync")
+            self.add_skip_email_synch_label(iam_user)
 
         for f in voms_user['fqans']:
             logging.info("Importing %s membership in VOMS FQAN: %s",
