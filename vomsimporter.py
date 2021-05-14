@@ -179,10 +179,10 @@ class IamService:
         parent_group = parent_group_name(group_name)
 
         iam_parent_group = None
-        if parent_group:
+        if parent_group is not None:
             iam_parent_group = self.find_group_by_name(parent_group)
 
-            if not iam_parent_group:
+            if iam_parent_group is None:
                 raise IamError("Expected IAM group not found! %s" %
                                parent_group)
 
@@ -191,7 +191,7 @@ class IamService:
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group", "urn:indigo-dc:scim:schemas:IndigoGroup"]
         }
 
-        if iam_parent_group:
+        if iam_parent_group is not None:
             parent_payload = {
                 "parentGroup": {
                     "value": iam_parent_group['id'],
@@ -218,7 +218,7 @@ class IamService:
                      voms_role, optional_group_name)
         iam_group = self.find_group_by_name(optional_group_name)
 
-        if not iam_group:
+        if iam_group is None:
             iam_group = self.create_group_with_name(optional_group_name)
         else:
             logging.info("Optional group %s already present",
@@ -289,7 +289,7 @@ class IamService:
     def build_username(self, voms_user):
         user_id = "user.%d" % voms_user['id']
 
-        if self._username_attr:
+        if self._username_attr is not None:
             for attr in voms_user['attributes']:
                 if attr['name'] == self._username_attr:
                     return attr['value']
@@ -373,7 +373,7 @@ class IamService:
 
     def get_voms_id_label(self, iam_user):
         labels = self.get_user_labels(iam_user)
-        if labels:
+        if labels is not None:
             for l in labels:
                 if l['name'] == "voms.%s.id" % self._vo:
                     return l
@@ -459,15 +459,15 @@ class IamService:
 
         iam_user = self.find_user_by_voms_user(voms_user)
 
-        if iam_user:
+        if iam_user is not None:
             logging.info(
                 "IAM account matching VOMS id %s found. Will sync information on that account" % voms_user['id'])
         else:
             iam_user = self.find_user_by_email(voms_user['emailAddress'])
 
-            if iam_user:
+            if iam_user is not None:
                 voms_id_label = self.get_voms_id_label(iam_user)
-                if not voms_id_label:
+                if voms_id_label is None:
                     logging.warning("IAM account found matching VOMS user %s email: %s. Will import information on that account",
                                     user_desc, voms_user['emailAddress'])
 
@@ -484,7 +484,9 @@ class IamService:
                         return
 
         # IAM account not found for voms id or email, create one
-        if not iam_user:
+        if iam_user is None:
+            logging.info(
+                "No IAM account found matching VOMS user id %s found, will create a new one" % voms_user['id'])
             iam_user = self.create_user_from_voms(voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
@@ -501,7 +503,7 @@ class IamService:
             iam_group_name = fqan2iam_group_name(f)
             iam_group = self.find_group_by_name(iam_group_name)
 
-            if not iam_group:
+            if iam_group is None:
                 iam_group = self.create_group_with_name(iam_group_name)
 
                 if fqan_is_role(f):
@@ -587,7 +589,7 @@ class IamService:
             if attr['name'] == 'nickname':
                 nickname = attr['value']
 
-        if not nickname:
+        if nickname is None:
             logging.warn("No nickname defined for voms user %s -> No CERN SSO account link" %
                          voms_user['id'])
             return None
@@ -675,7 +677,7 @@ class IamService:
         self._email_override = {}
         self._import_id_list = None
 
-        if email_mapfile:
+        if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
 
         self._load_token()
@@ -698,7 +700,7 @@ class VomsImporter:
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
 
-        if args.id_file:
+        if args.id_file is not None:
             self._load_id_file(args.id_file)
 
     def _load_id_file(self, id_file):
