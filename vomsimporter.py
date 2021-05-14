@@ -486,7 +486,7 @@ class IamService:
         # IAM account not found for voms id or email, create one
         if iam_user is None:
             logging.info(
-                "No IAM account found matching VOMS user id %s found, will create a new one" % voms_user['id'])
+                "No IAM account found matching VOMS user id %s found, will create a new one", voms_user['id'])
             iam_user = self.create_user_from_voms(voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
