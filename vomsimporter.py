@@ -7,16 +7,17 @@ import uuid
 import requests
 import subprocess
 import csv
-import ldap
 
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
 os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
+DN_CONVERTER_COMMAND = "dn_converter"
 
 
 def convert_dn_rfc2253(dn):
-    parsed_dn = ldap.dn.str2dn(dn,flags=ldap.DN_FORMAT_DCE)
-    return ldap.dn.dn2str(parsed_dn)
+    rfc_dn = subprocess.check_output(
+        [DN_CONVERTER_COMMAND, dn]).replace("\n", "")
+    return rfc_dn
 
 
 def leaf_group_name(group):
@@ -570,45 +571,16 @@ class IamService:
                     voms_user, iam_user, cern_login)
 
     def resolve_cern_login_from_ldap(self, voms_user):
-        cern_login = None
-        lfilter = "(&(objectClass=user)(employeeType=Primary)(employeeID={0}))".format(voms_user['cernHrId'])
+        cern_login = subprocess.check_output(["resolve_cern_login", str(voms_user[
+            'cernHrId']), self._ldap_host, self._ldap_port]).replace("\n", "").strip()
 
-        ldap.set_option(ldap.OPT_REFERRALS, 0)
-        l = ldap.initialize("ldap://{0}:{1}".format(self._ldap_host, self._ldap_port))
-
-        try:
-            #sasl_auth = ldap.sasl.sasl({},'GSSAPI')
-            #l.sasl_interactive_bind_s("", sasl_auth)
-            l.simple_bind_s('','')
-
-            r = l.search_s("DC=cern,DC=ch", ldap.SCOPE_SUBTREE, lfilter, [ 'cn', 'proxyAddresses' ])
-            if len(r) == 0:
-                logging.warn("CERN login resolution failed for personId %s",
-                    voms_user['cernHrId'])
-                return None
-
-            dn, attrs = r[0]
-            cern_login = attrs['cn'][0].decode('utf-8')
-
-            # this info may be useful for service accounts where primary
-            # CERN user account is not right choice for login name
-            #if 'emailAddress' in voms_user and 'proxyAddresses' in attrs:
-            #    proxy_addresses = [x.decode('utf-8') for x in attrs['proxyAddresses']]
-            #    ldap_uc_emails = [x.upper() for x in proxy_addresses if x.upper().startswith('SMTP:')]
-            #    voms_uc_email = voms_user['emailAddress'].upper()
-            #    if voms_uc_email not in ldap_uc_emails:
-            #        logging.debug("CERN login resolution suspicious for personId %s (email %s not in LDAP)",
-            #            voms_user['cernHrId'], voms_user['emailAddress'])
-
-        except Exception as e:
-            logging.error("CERN login resolved via LDAP failed: %s", str(e))
-
-        finally:
-            l.unbind()
+        if len(cern_login) == 0:
+            logging.warn("CERN login resolution failed for personId %s", voms_user[
+                'cernHrId'])
+            return None
 
         logging.info("CERN login resolved via LDAP: personId %s => %s", voms_user[
             'cernHrId'], cern_login)
-
         return cern_login
 
     def resolve_cern_login_from_attributes(self, voms_user):

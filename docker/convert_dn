@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+dn=$1
+
+echo ${dn} | nc localhost 9876
