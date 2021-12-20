@@ -12,7 +12,6 @@ ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
 COPY --from=builder /root/rfc2253/dn_converter /usr/local/bin/dn_converter
-ADD ./resolve_cern_login /usr/local/bin/resolve_cern_login
 
 ENV TEST_USER $TEST_USER
 ENV TEST_USER_UID $TEST_USER_UID
