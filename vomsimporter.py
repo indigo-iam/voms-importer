@@ -12,11 +12,13 @@ import ldap
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
 os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
+DN_CONVERTER_COMMAND = "dn_converter"
 
 
 def convert_dn_rfc2253(dn):
-    parsed_dn = ldap.dn.str2dn(dn,flags=ldap.DN_FORMAT_DCE)
-    return ldap.dn.dn2str(parsed_dn)
+    rfc_dn = subprocess.check_output(
+        [DN_CONVERTER_COMMAND, dn]).replace("\n", "")
+    return rfc_dn
 
 
 def leaf_group_name(group):
