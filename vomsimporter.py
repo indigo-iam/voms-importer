@@ -435,6 +435,29 @@ class IamService:
         r = self._s.patch(url, headers=headers, json=payload)
         r.raise_for_status()
 
+    def remove_user_from_group(self, iam_user, iam_group):
+        logging.debug("Removing user %s from group %s", self.iam_user_str(
+            iam_user), self.iam_group_str(iam_group))
+
+        url = "%s://%s/scim/Groups/%s" % (self._protocol,
+                                          self._host, iam_group['id'])
+        payload = {
+            'schemas': ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+            'operations': [
+                {
+                    'op': 'remove',
+                    'path': 'members',
+                    'value': [{
+                        'display': iam_user['displayName'],
+                        'value': iam_user['id']
+                    }]
+                }]
+        }
+        headers = {'Content-type': 'application/scim+json'}
+
+        r = self._s.patch(url, headers=headers, json=payload)
+        r.raise_for_status()
+
     def iam_user_str(self, iam_user):
         return "%s (%s)" % (iam_user['displayName'], iam_user['id'])
 
@@ -497,10 +520,12 @@ class IamService:
             logging.info("User has email override, disable HR email sync")
             self.add_skip_email_synch_label(iam_user)
 
+        iam_group_names = set()
         for f in voms_user['fqans']:
             logging.info("Importing %s membership in VOMS FQAN: %s",
                          iam_user_str, f)
             iam_group_name = fqan2iam_group_name(f)
+            iam_group_names.add(iam_group_name)
             iam_group = self.find_group_by_name(iam_group_name)
 
             if iam_group is None:
@@ -510,7 +535,18 @@ class IamService:
                     self.label_group_as_optional(iam_group)
 
             self.add_user_to_group(iam_user, iam_group)
-        # # FIXME: the script should also remove the user from groups where it doesn't belong anymore
+
+        # remove the user from groups where it doesn't belong anymore
+        for iam_user_group in iam_user['groups']:
+            iam_group_name = iam_user_group['display']
+            if iam_group_name in iam_group_names:
+                continue
+
+            iam_group = self.find_group_by_name(iam_group_name)
+            if iam_group is None: # this should not happen
+                continue
+
+            self.remove_user_from_group(iam_user, iam_group)
 
         logging.info("Syncing generic attributes for user %s",
                      iam_user_str)
