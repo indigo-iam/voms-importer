@@ -741,9 +741,10 @@ class IamService:
             if voms_groups:
                 for g in voms_groups:
                     self._voms_groups.add(voms2iam_group_name(g))
-            if voms_roles:
-                for r in voms_roles:
-                    self._voms_groups.add(fqan2iam_group_name(r))
+                if voms_roles:
+                    for g in voms_groups:
+                        for r in voms_roles:
+                            self._voms_groups.add(voms2iam_group_name(fqan2iam_group_name("{0}/{1}".format(g, r))))
 
         self._load_token()
         self._init_session()
