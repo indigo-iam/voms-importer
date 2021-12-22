@@ -759,9 +759,9 @@ class VomsImporter:
         voms_groups = None
         voms_roles = None
         if not args.skip_group_removal:
-            if args.skip_groups_import:
+            if not args.skip_groups_import:
                 voms_groups = self._voms_service.get_groups()
-            if args.skip_roles_import:
+            if not args.skip_roles_import:
                 voms_roles = self._voms_service.get_roles()
 
         self._iam_service = IamService(
