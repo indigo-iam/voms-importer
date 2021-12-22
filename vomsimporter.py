@@ -94,6 +94,20 @@ class VomsService:
         logging.debug("VOMS root_groups: %s", groups)
         return groups
 
+    def get_groups(self):
+        ret = []
+
+        groups = ["/%s" % self._vo]
+        while len(groups) > 0:
+            group = groups.pop()
+            subgroups = self._proxy.call_method("list-sub-groups", group)
+            if subgroups:
+                for g in subgroups:
+                    groups.append(g)
+            ret.append(group)
+
+        return sorted(ret)
+
     def get_roles(self):
         roles = self._proxy.call_method("list-roles")
         logging.debug("VOMS roles: %s", roles)
@@ -537,16 +551,21 @@ class IamService:
             self.add_user_to_group(iam_user, iam_group)
 
         # remove the user from groups where it doesn't belong anymore
-        for iam_user_group in iam_user['groups']:
-            iam_group_name = iam_user_group['display']
-            if iam_group_name in iam_group_names:
-                continue
+        if self._voms_groups:
+            for iam_user_group in iam_user['groups']:
+                iam_group_name = iam_user_group['display']
+                if iam_group_name in iam_group_names:
+                    continue
 
-            iam_group = self.find_group_by_name(iam_group_name)
-            if iam_group is None: # this should not happen
-                continue
+                if iam_group_name not in self._voms_groups:
+                    # don't remove groups that doesn't come from VOMS
+                    continue
 
-            self.remove_user_from_group(iam_user, iam_group)
+                iam_group = self.find_group_by_name(iam_group_name)
+                if iam_group is None: # this should not happen
+                    continue
+
+                self.remove_user_from_group(iam_user, iam_group)
 
         logging.info("Syncing generic attributes for user %s",
                      iam_user_str)
@@ -698,7 +717,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None):
 
         self._host = host
         self._port = port
@@ -716,6 +735,16 @@ class IamService:
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
 
+        self._voms_groups = None
+        if voms_groups or voms_roles:
+            self._voms_groups = set()
+            if voms_groups:
+                for g in voms_groups:
+                    self._voms_groups.add(voms2iam_group_name(g))
+            if voms_roles:
+                for r in voms_roles:
+                    self._voms_groups.add(fqan2iam_group_name(r))
+
         self._load_token()
         self._init_session()
 
@@ -727,11 +756,20 @@ class VomsImporter:
         self._voms_service = VomsService(
             host=args.voms_host, port=args.voms_port, vo=args.vo)
 
+        voms_groups = None
+        voms_roles = None
+        if not args.skip_group_removal:
+            if args.skip_groups_import:
+                voms_groups = self._voms_service.get_groups()
+            if args.skip_roles_import:
+                voms_roles = self._voms_service.get_roles()
+
         self._iam_service = IamService(
             host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
-            merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile)
+            merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
+            voms_groups=voms_groups, voms_roles=voms_roles)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -898,6 +936,8 @@ def init_argparse():
                         action="store_true", dest="skip_roles_import", help="Skips roles import")
     parser.add_argument('--skip-users-import', required=False, default=False,
                         action="store_true", dest="skip_users_import", help="Skips users import")
+    parser.add_argument('--skip-group-removal', required=False, default=False,
+                        action="store_true", dest="skip_group_removal", help="Skips group removal")
     parser.add_argument('--vo', required=True, type=str,
                         help="The VO to be migrated", dest="vo")
     parser.add_argument('--voms-host', required=True, type=str,
