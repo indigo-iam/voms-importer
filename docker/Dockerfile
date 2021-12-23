@@ -1,17 +1,9 @@
-FROM centos:7 as builder
-
-ADD rfc2253 /root/rfc2253
-
-RUN yum -y install gcc-c++ openssl-devel
-RUN cd /root/rfc2253 && c++ --version && c++ --std=c++11 -lcrypto -lssl -o dn_converter rfc2253.cpp
-
 FROM centos:7
 
 # Allow customization of test user ID and name
 ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
-COPY --from=builder /root/rfc2253/dn_converter /usr/local/bin/dn_converter
 ADD ./resolve_cern_login /usr/local/bin/resolve_cern_login
 
 ENV TEST_USER $TEST_USER
@@ -27,7 +19,7 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
       echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
       adduser --uid ${TEST_USER_UID} ${TEST_USER} && \
       usermod -a -G wheel ${TEST_USER} && \
-      yum -y install nc jq java-11-openjdk && \
+      yum -y install jq java-11-openjdk && \
       wget https://ci.cloud.cnaf.infn.it/view/repos/job/repo_test_ca/lastSuccessfulBuild/artifact/test-ca.repo -O /etc/yum.repos.d/test-ca.repo && \
       yum -y install igi-test-ca && \
       yum -y install voms-clients-java && \
@@ -40,12 +32,9 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
 ENV TINI_VERSION v0.18.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
-ADD ./convert_dn /usr/local/bin
-ADD ./dn-converter-0.0.1-SNAPSHOT.jar /home/$TEST_USER
 COPY ./init-credentials.sh /usr/local/bin/init-credentials.sh
 COPY ./vomsimporter.py /usr/local/bin/vomsimporter
 RUN chmod 755 /usr/local/bin/vomsimporter
-RUN chown $TEST_USER:$TEST_USER /home/$TEST_USER/dn-converter-0.0.1-SNAPSHOT.jar
 
 ENTRYPOINT ["/tini", "--", "/usr/local/bin/vomsimporter"]
 CMD ["--help"]

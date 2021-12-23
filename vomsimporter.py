@@ -11,13 +11,23 @@ import csv
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
 os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
-DN_CONVERTER_COMMAND = "dn_converter"
 
 
 def convert_dn_rfc2253(dn):
-    rfc_dn = subprocess.check_output(
-        [DN_CONVERTER_COMMAND, dn]).replace("\n", "")
-    return rfc_dn
+    # NOTE: just very naieve / incomplete implementation of DN parsing
+    # https://datatracker.ietf.org/doc/html/rfc4514#section-3
+    sep = re.compile(b'^/(([a-z]+|[0-9](\.[0-9])*)=.*?)(|/[a-z]+=.*)$', re.IGNORECASE)
+    tmp = dn.encode('utf-8')
+    parts = []
+    while tmp != b'':
+        res = sep.match(tmp)
+        if res == None:
+            _log.error("unable to decode dn: %s", dn)
+            return ''
+        parts.append(res.group(1))
+        tmp = res.group(4)
+    parts.reverse()
+    return ','.join(parts)
 
 
 def leaf_group_name(group):
