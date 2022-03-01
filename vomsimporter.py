@@ -594,6 +594,8 @@ class IamService:
                          voms_user['id'])
             return None
 
+        return nickname
+
     def create_cern_sso_account_link(self, voms_user, iam_user, cern_login):
         url = "%s://%s/scim/Users/%s" % (self._protocol,
                                          self._host, iam_user['id'])
