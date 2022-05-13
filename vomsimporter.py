@@ -15,14 +15,15 @@ os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
 
 def convert_dn_rfc2253(dn):
     # NOTE: just very naieve / incomplete implementation of DN parsing
+    #       string OR numericoid EQUALS non-empty string
     # https://datatracker.ietf.org/doc/html/rfc4514#section-3
-    sep = re.compile(b'^/(([a-z]+|[0-9](\.[0-9])*)=.*?)(|/[a-z]+=.*)$', re.IGNORECASE)
+    sep = re.compile(b'^/(([a-z]+|[0-9](\.[0-9])*)=.+?)(|/[a-z]+=.*)$', re.IGNORECASE)
     tmp = dn.encode('utf-8')
     parts = []
     while tmp != b'':
         res = sep.match(tmp)
         if res == None:
-            _log.error("unable to decode dn: %s", dn)
+            logging.error("unable to decode dn: %s", dn)
             return ''
         parts.append(res.group(1))
         tmp = res.group(4)
