@@ -17,7 +17,7 @@ def convert_dn_rfc2253(dn):
     # NOTE: just very naieve / incomplete implementation of DN parsing
     #       string OR numericoid EQUALS non-empty string
     # https://datatracker.ietf.org/doc/html/rfc4514#section-3
-    sep = re.compile(b'^/(([a-z]+|[0-9](\.[0-9])*)=.+?)(|/[a-z]+=.*)$', re.IGNORECASE)
+    sep = re.compile(b'^/(([a-z]+|[0-9](\.[0-9])*)=[^=]+)(|/[a-z]+=.*)$', re.IGNORECASE)
     tmp = dn.encode('utf-8')
     parts = []
     while tmp != b'':
