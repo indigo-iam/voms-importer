@@ -16,6 +16,6 @@
     "source=${localEnv:HOME}/.globus,target=/home/vscode/.globus,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.config/oidc-agent,target=/home/vscode/.config/oidc-agent,type=bind,consistency=cached"
   ],
-  "postStartCommand": "sudo ln -s ${containerWorkspaceFolder}/docker/rfc2253/a.out /usr/local/bin/dn_converter",
+  "postStartCommand": "sudo ln -sf ${containerWorkspaceFolder}/docker/rfc2253/a.out /usr/local/bin/dn_converter",
   "remoteUser": "vscode"
 }
