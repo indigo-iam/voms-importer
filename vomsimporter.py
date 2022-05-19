@@ -106,7 +106,7 @@ class VomsService:
                     groups.append(g)
             ret.append(group)
 
-        return sorted(ret)
+        return ret
 
     def get_roles(self):
         roles = self._proxy.call_method("list-roles")
@@ -732,7 +732,7 @@ class IamService:
                 if voms_roles:
                     for g in voms_groups:
                         for r in voms_roles:
-                            self._voms_groups.add(voms2iam_group_name(fqan2iam_group_name("{0}/{1}".format(g, r))))
+                            self._voms_groups.add(fqan2iam_group_name("{0}/{1}".format(g, r)))
 
         self._load_token()
         self._init_session()
