@@ -541,7 +541,10 @@ class IamService:
 
         # remove the user from groups where it doesn't belong anymore
         if self._voms_groups:
-            for iam_user_group in iam_user['groups']:
+            # start with groups with longest display name, IAM automatically remove
+            # subgroups and we don't want to trigger exception by calling
+            # remove_user_from_group for missing group
+            for iam_user_group in sorted(iam_user['groups'], key=lambda x: -len(x['display'])):
                 iam_group_name = iam_user_group['display']
                 if iam_group_name in iam_group_names:
                     continue
