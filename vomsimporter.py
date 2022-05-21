@@ -564,16 +564,17 @@ class IamService:
 
             if self._link_cern_sso:
                 cern_login = self.resolve_cern_login_from_attributes(voms_user)
-                self.create_cern_sso_account_link(
-                    voms_user, iam_user, cern_login)
+                self.create_cern_sso_account_link(iam_user, cern_login)
             elif self._link_cern_sso_ldap:
                 cern_login = self.resolve_cern_login_from_ldap(voms_user)
-                self.create_cern_sso_account_link(
-                    voms_user, iam_user, cern_login)
+                self.create_cern_sso_account_link(iam_user, cern_login)
 
     def resolve_cern_login_from_ldap(self, voms_user):
-        cern_login = None
-        lfilter = "(&(objectClass=user)(employeeType=Primary)(employeeID={0}))".format(voms_user['cernHrId'])
+        cern_hr_id = voms_user.get('cernHrId')
+        if cern_hr_id == None:
+            return None
+
+        lfilter = "(&(objectClass=user)(employeeType=Primary)(employeeID={0}))".format(cern_hr_id)
 
         ldap.set_option(ldap.OPT_REFERRALS, 0)
         l = ldap.initialize("ldap://{0}:{1}".format(self._ldap_host, self._ldap_port))
@@ -584,13 +585,13 @@ class IamService:
             r = l.search_s("DC=cern,DC=ch", ldap.SCOPE_SUBTREE, lfilter, [ 'cn' ])
             if len(r) == 0:
                 logging.warn("CERN login resolution failed for personId %s",
-                    voms_user['cernHrId'])
+                    cern_hr_id)
                 return None
 
             dn, attrs = r[0]
             cern_login = attrs['cn'][0]
             logging.info("CERN login resolved via LDAP: personId %s => %s",
-                voms_user['cernHrId'], cern_login)
+                cern_hr_id, cern_login)
 
             return cern_login
 
@@ -614,6 +615,11 @@ class IamService:
             return None
 
     def create_cern_sso_account_link(self, voms_user, iam_user, cern_login):
+        if cern_login == None:
+            logging.warning("Unable to link user %s to CERN SSO (not found)",
+                iam_user['displayName'])
+            return
+
         url = "%s://%s/scim/Users/%s" % (self._protocol,
                                          self._host, iam_user['id'])
 
