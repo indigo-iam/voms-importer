@@ -614,6 +614,8 @@ class IamService:
                          voms_user['id'])
             return None
 
+        return nickname
+
     def create_cern_sso_account_link(self, iam_user, cern_login):
         if cern_login == None:
             logging.warning("Unable to link user %s to CERN SSO (not found)",

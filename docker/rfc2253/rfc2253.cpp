@@ -1,4 +1,4 @@
-// compile with: g++ -std=c++11 rfc2253.cpp -lcrypto -lssl
+// compile with: g++ -std=c++11 rfc2253.cpp -lcrypto
 //  add -DENABLE_TESTING to do testing
 
 #include <openssl/x509.h>
@@ -16,8 +16,10 @@ std::string to_rfc2253(std::string const& name);
 TEST_CASE("Testing rfc 2253")
 {
   CHECK(to_rfc2253("/DC=ch/CN=") == "");
+  CHECK(to_rfc2253("DC=ch/CN=") == "");
   CHECK(to_rfc2253("/DC=ch/=pippo") == "");
   CHECK(to_rfc2253("/D=ch/CN=pippo") == "");
+  CHECK(to_rfc2253("DC=ch/CN=pippo") == "");
   CHECK(to_rfc2253("/DC=ch/CN=pippo") == "CN=pippo,DC=ch");
   CHECK(to_rfc2253("/DC=ch/DC=cern/OU=computers/CN=unified") ==
         "CN=unified,OU=computers,DC=cern,DC=ch");
@@ -31,6 +33,10 @@ TEST_CASE("Testing rfc 2253")
         "CN=Cruz Martinez M. Begona De La u3606@ciemat.es,O=Centro de "
         "Investigaciones Energeticas Medioambientales y "
         "Tecnologicas,C=ES,DC=tcs,DC=terena,DC=org");
+  CHECK(to_rfc2253("/DC=org/DC=incommon/C=US/ST=California/L=La Jolla/O=University of California, San Diego") == R"(O=University of California\, San Diego,L=La Jolla,ST=California,C=US,DC=incommon,DC=org)");
+  CHECK(to_rfc2253("/C=IT/O=INFN/OU=Personal Certificate/L=Milano/CN=Mario Rossi/Email=mario.rossi@mi.infn.it") == "");
+  CHECK(to_rfc2253("/C=DE/O=Max/CN=Rossi, Dr. Mario ABC1234@uni-hamburg.de") == R"(CN=Rossi\, Dr. Mario ABC1234@uni-hamburg.de,O=Max,C=DE)");
+  CHECK(to_rfc2253("/C=DE/O=GridGermany/OU=Technische Universitaet Dresden/sn=Becker/gn=Boris/CN=Boris Becker") == "");
 }
 
 #else  // ENABLE_TESTING
@@ -48,6 +54,24 @@ int main(int argc, char* argv[])
 }
 
 #endif  // ENABLE_TESTING
+
+bool is_special(char c)
+{
+  return c == ',' || c == '+';
+}
+
+std::string escape(std::string const& value)
+{
+  std::string result;
+  result.reserve(value.size());
+  for (char c : value) {
+    if (is_special(c)) {
+      result.push_back('\\');
+    }
+    result.push_back(c);
+  }
+  return result;
+}
 
 std::string to_rfc2253(std::string const& name)
 {
@@ -74,7 +98,7 @@ std::string to_rfc2253(std::string const& name)
       if (not result.empty()) {
         result += ',';
       }
-      result += type + '=' + value;
+      result += type + '=' + escape(value);
     } else {
       return std::string{};
     }
