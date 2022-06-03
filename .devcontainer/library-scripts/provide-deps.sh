@@ -37,4 +37,5 @@ yum -y install \
   ca-policy-egi-core \
   fetch-crl \
   oidc-agent-cli \
-  bind-utils
+  bind-utils \
+  python-ldap

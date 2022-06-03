@@ -10,7 +10,8 @@
   ],
   "settings": {},
   "extensions": [
-    "ms-python.python"
+    "ms-python.python",
+    "eamodio.gitlens"
   ],
   "mounts": [
     "source=${localEnv:HOME}/.globus,target=/home/vscode/.globus,type=bind,consistency=cached",
