@@ -12,7 +12,6 @@ ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
 COPY --from=builder /root/rfc2253/dn_converter /usr/local/bin/dn_converter
-ADD ./resolve_cern_login /usr/local/bin/resolve_cern_login
 
 ENV TEST_USER $TEST_USER
 ENV TEST_USER_UID $TEST_USER_UID
@@ -20,6 +19,7 @@ ENV TEST_USER_UID $TEST_USER_UID
 RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py > get-pip.py && \
   python get-pip.py && \
   pip install requests && \
+  yum -y install python-ldap && \
   yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-externals-rpm/centos7/python2-zsi-2.1-16.el7.noarch.rpm && \
   yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-rpm-stable/centos7/voms-admin-client-2.0.20-1.el7.noarch.rpm 
 

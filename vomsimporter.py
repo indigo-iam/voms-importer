@@ -7,6 +7,7 @@ import uuid
 import requests
 import subprocess
 import csv
+import ldap
 
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
@@ -563,25 +564,44 @@ class IamService:
 
             if self._link_cern_sso:
                 cern_login = self.resolve_cern_login_from_attributes(voms_user)
-                self.create_cern_sso_account_link(
-                    voms_user, iam_user, cern_login)
+                self.create_cern_sso_account_link(iam_user, cern_login)
             elif self._link_cern_sso_ldap:
                 cern_login = self.resolve_cern_login_from_ldap(voms_user)
-                self.create_cern_sso_account_link(
-                    voms_user, iam_user, cern_login)
+                self.create_cern_sso_account_link(iam_user, cern_login)
 
     def resolve_cern_login_from_ldap(self, voms_user):
-        cern_login = subprocess.check_output(["resolve_cern_login", str(voms_user[
-            'cernHrId']), self._ldap_host, self._ldap_port]).replace("\n", "").strip()
-
-        if len(cern_login) == 0:
-            logging.warn("CERN login resolution failed for personId %s", voms_user[
-                'cernHrId'])
+        cern_hr_id = voms_user.get('cernHrId')
+        if cern_hr_id == None:
             return None
 
-        logging.info("CERN login resolved via LDAP: personId %s => %s", voms_user[
-            'cernHrId'], cern_login)
-        return cern_login
+        lfilter = "(&(objectClass=user)(employeeType=Primary)(employeeID={0}))".format(cern_hr_id)
+
+        ldap.set_option(ldap.OPT_REFERRALS, 0)
+        l = ldap.initialize("ldap://{0}:{1}".format(self._ldap_host, self._ldap_port))
+
+        try:
+            l.simple_bind_s('','')
+
+            r = l.search_s("DC=cern,DC=ch", ldap.SCOPE_SUBTREE, lfilter, [ 'cn' ])
+            if len(r) == 0:
+                logging.warn("CERN login resolution failed for personId %s",
+                    cern_hr_id)
+                return None
+
+            dn, attrs = r[0]
+            cern_login = attrs['cn'][0]
+            logging.info("CERN login resolved via LDAP: personId %s => %s",
+                cern_hr_id, cern_login)
+
+            return cern_login
+
+        except Exception as e:
+            logging.error("CERN login resolved via LDAP failed: %s", str(e))
+
+        finally:
+            l.unbind()
+
+        return None
 
     def resolve_cern_login_from_attributes(self, voms_user):
         nickname = None
@@ -596,7 +616,12 @@ class IamService:
 
         return nickname
 
-    def create_cern_sso_account_link(self, voms_user, iam_user, cern_login):
+    def create_cern_sso_account_link(self, iam_user, cern_login):
+        if cern_login == None:
+            logging.warning("Unable to link user %s to CERN SSO (not found)",
+                iam_user['displayName'])
+            return
+
         url = "%s://%s/scim/Users/%s" % (self._protocol,
                                          self._host, iam_user['id'])
 
