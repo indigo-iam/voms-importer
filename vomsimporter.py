@@ -604,7 +604,7 @@ class IamService:
 
             self.link_certificate(iam_user, cert)
 
-        if voms_user.has_key('cernHrId'):
+        if voms_user.get('cernHrId') is not None:
             logging.info("Linking user %s to CERN person id %d",
                          iam_user_str, voms_user['cernHrId'])
             self.add_cern_person_id_label(iam_user, voms_user['cernHrId'])
