@@ -168,6 +168,10 @@ class IamService:
 
     def find_group_by_name(self, group_name):
 
+        for name, group in self._iam_groups.items():
+            if name == group_name:
+                return group
+
         url = "%s/iam/group/find/byname" % self._base_url()
         params = {"name": group_name}
         r = self._s.get(url, params=params)
@@ -182,7 +186,9 @@ class IamService:
         if total_results == 0:
             return None
         if total_results == 1:
-            return data['Resources'][0]
+            group = data['Resources'][0]
+            self._iam_groups[group['displayName']] = group
+            return group
         else:
             raise IamError(
                 "Multiple groups returned for name: %s" % group_name)
@@ -749,6 +755,7 @@ class IamService:
         self._merge_accounts = merge_accounts
         self._email_override = {}
         self._import_id_list = None
+        self._iam_groups = {}
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
