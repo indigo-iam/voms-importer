@@ -308,7 +308,9 @@ class IamService:
         if self._username_attr is not None:
             for attr in voms_user['attributes']:
                 if attr['name'] == self._username_attr:
-                    return attr['value']
+                    username = attr.get('value')
+                    if username is not None and len(username) > 0:
+                        return username
             logging.error("Attribute %s not found for user %s. Will fall back to default username %s",
                           self._username_attr, voms_user['id'], user_id)
             return user_id
