@@ -849,6 +849,7 @@ class VomsImporter:
         for id in self._voms_user_ids:
             u = self._voms_service.get_voms_user(id)
             self._iam_service.import_voms_user(u)
+            import_count = import_count + 1
             logging.info("Import count: %d", import_count)
             if self._args.count > 0 and import_count >= self._args.count:
                 logging.info(
