@@ -516,11 +516,13 @@ class IamService:
                                         user_desc, voms_user['emailAddress'], voms_id_label['value'])
                         return
 
+        new_user = False
         # IAM account not found for voms id or email, create one
         if iam_user is None:
             logging.info(
                 "No IAM account found matching VOMS user id %s found, will create a new one", voms_user['id'])
             iam_user = self.create_user_from_voms(voms_user)
+            new_user = True
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
@@ -547,7 +549,7 @@ class IamService:
             self.add_user_to_group(iam_user, iam_group)
 
         # remove the user from groups where it doesn't belong anymore
-        if self._voms_groups:
+        if not new_user and self._voms_groups:
             # start with groups with longest display name, IAM automatically remove
             # subgroups and we don't want to trigger exception by calling
             # remove_user_from_group for missing group
