@@ -168,9 +168,8 @@ class IamService:
 
     def find_group_by_name(self, group_name):
 
-        for name, group in self._iam_groups.items():
-            if name == group_name:
-                return group
+        if group_name in self._iam_groups:
+            return self._iam_groups[group_name]
 
         url = "%s/iam/group/find/byname" % self._base_url()
         params = {"name": group_name}
@@ -187,7 +186,7 @@ class IamService:
             return None
         if total_results == 1:
             group = data['Resources'][0]
-            self._iam_groups[group['displayName']] = group
+            self._iam_groups[group_name] = group
             return group
         else:
             raise IamError(
