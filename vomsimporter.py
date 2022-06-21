@@ -95,6 +95,20 @@ class VomsService:
         logging.debug("VOMS root_groups: %s", groups)
         return groups
 
+    def get_groups(self):
+        ret = []
+
+        groups = ["/%s" % self._vo]
+        while len(groups) > 0:
+            group = groups.pop()
+            subgroups = self._proxy.call_method("list-sub-groups", group)
+            if subgroups:
+                for g in subgroups:
+                    groups.append(g)
+            ret.append(group)
+
+        return ret
+
     def get_roles(self):
         roles = self._proxy.call_method("list-roles")
         logging.debug("VOMS roles: %s", roles)
@@ -154,8 +168,10 @@ class IamService:
 
     def find_group_by_name(self, group_name):
 
-        url = "%s://%s:%d/iam/group/find/byname" % (
-            self._protocol, self._host, self._port)
+        if group_name in self._iam_groups:
+            return self._iam_groups[group_name]
+
+        url = "%s/iam/group/find/byname" % self._base_url()
         params = {"name": group_name}
         r = self._s.get(url, params=params)
         r.raise_for_status()
@@ -169,7 +185,9 @@ class IamService:
         if total_results == 0:
             return None
         if total_results == 1:
-            return data['Resources'][0]
+            group = data['Resources'][0]
+            self._iam_groups[group_name] = group
+            return group
         else:
             raise IamError(
                 "Multiple groups returned for name: %s" % group_name)
@@ -204,8 +222,7 @@ class IamService:
 
         headers = self._build_authz_header()
         headers['Content-type'] = "application/scim+json"
-        url = "%s://%s:%d/scim/Groups" % (self._protocol,
-                                          self._host, self._port)
+        url = "%s/scim/Groups" % self._base_url()
         r = self._s.post(url, headers=headers, json=payload)
         r.raise_for_status()
         logging.debug("IAM group created: %s", group_name)
@@ -233,8 +250,7 @@ class IamService:
         self.create_group_with_name(group_name)
 
     def label_group_as_optional(self, group):
-        url = "%s://%s/iam/group/%s/labels" % (
-            self._protocol, self._host, group['id'])
+        url = "%s/iam/group/%s/labels" % (self._base_url(), group['id'])
 
         role_label = {"name": "voms.role"}
         og_label = {"name": "wlcg.optional-group"}
@@ -248,8 +264,7 @@ class IamService:
         r.raise_for_status()
 
     def find_user_by_email(self, email):
-        url = "%s://%s:%d/iam/account/find/byemail" % (self._protocol,
-                                                       self._host, self._port)
+        url = "%s/iam/account/find/byemail" % self._base_url()
         params = {"email": email}
         r = self._s.get(url, params=params,
                         headers=self._build_authz_header())
@@ -269,8 +284,7 @@ class IamService:
                 "Multiple IAM accounts found for email: %s" % email)
 
     def find_user_by_voms_user(self, voms_user):
-        url = "%s://%s:%d/iam/account/find/bylabel" % (self._protocol,
-                                                       self._host, self._port)
+        url = "%s/iam/account/find/bylabel" % self._base_url()
 
         params = {"name": "voms.%s.id" %
                   self._vo, "value": voms_user['id']}
@@ -293,7 +307,9 @@ class IamService:
         if self._username_attr is not None:
             for attr in voms_user['attributes']:
                 if attr['name'] == self._username_attr:
-                    return attr['value']
+                    username = attr.get('value')
+                    if username is not None and len(username) > 0:
+                        return username
             logging.error("Attribute %s not found for user %s. Will fall back to default username %s",
                           self._username_attr, voms_user['id'], user_id)
             return user_id
@@ -302,7 +318,7 @@ class IamService:
             return user_id
 
     def create_user_from_voms(self, voms_user):
-        url = "%s://%s/scim/Users" % (self._protocol, self._host)
+        url = "%s/scim/Users" % self._base_url()
         headers = {'Content-type': 'application/scim+json'}
         payload = {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:indigo-dc:scim:schemas:IndigoUser"],
@@ -334,8 +350,7 @@ class IamService:
         return iam_user
 
     def link_certificate(self, iam_user, cert):
-        url = "%s://%s/scim/Users/%s" % (self._protocol,
-                                         self._host, iam_user['id'])
+        url = "%s/scim/Users/%s" % (self._base_url(), iam_user['id'])
         payload = {
             'schemas': ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
             'operations': [
@@ -367,8 +382,7 @@ class IamService:
                 sys.exit(1)
 
     def set_user_attribute(self, iam_user, attribute):
-        url = "%s://%s/iam/account/%s/attributes" % (self._protocol,
-                                                     self._host, iam_user['id'])
+        url = "%s/iam/account/%s/attributes" % (self._base_url(), iam_user['id'])
         r = self._s.put(url, json=attribute)
         r.raise_for_status()
 
@@ -383,15 +397,13 @@ class IamService:
             return None
 
     def get_user_labels(self, iam_user):
-        label_url = "%s://%s/iam/account/%s/labels" % (self._protocol,
-                                                       self._host, iam_user['id'])
+        label_url = "%s/iam/account/%s/labels" % (self._base_url(), iam_user['id'])
         r = self._s.get(label_url)
         r.raise_for_status()
         return r.json()
 
     def add_user_label(self, iam_user, label):
-        label_url = "%s://%s/iam/account/%s/labels" % (self._protocol,
-                                                       self._host, iam_user['id'])
+        label_url = "%s/iam/account/%s/labels" % (self._base_url(), iam_user['id'])
 
         r = self._s.put(label_url, json=label)
         r.raise_for_status()
@@ -417,13 +429,34 @@ class IamService:
         logging.debug("Adding user %s to group %s", self.iam_user_str(
             iam_user), self.iam_group_str(iam_group))
 
-        url = "%s://%s/scim/Groups/%s" % (self._protocol,
-                                          self._host, iam_group['id'])
+        url = "%s/scim/Groups/%s" % (self._base_url(), iam_group['id'])
         payload = {
             'schemas': ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
             'operations': [
                 {
                     'op': 'add',
+                    'path': 'members',
+                    'value': [{
+                        'display': iam_user['displayName'],
+                        'value': iam_user['id']
+                    }]
+                }]
+        }
+        headers = {'Content-type': 'application/scim+json'}
+
+        r = self._s.patch(url, headers=headers, json=payload)
+        r.raise_for_status()
+
+    def remove_user_from_group(self, iam_user, iam_group):
+        logging.debug("Removing user %s from group %s", self.iam_user_str(
+            iam_user), self.iam_group_str(iam_group))
+
+        url = "%s/scim/Groups/%s" % (self._base_url(), iam_group['id'])
+        payload = {
+            'schemas': ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+            'operations': [
+                {
+                    'op': 'remove',
                     'path': 'members',
                     'value': [{
                         'display': iam_user['displayName'],
@@ -484,11 +517,13 @@ class IamService:
                                         user_desc, voms_user['emailAddress'], voms_id_label['value'])
                         return
 
+        new_user = False
         # IAM account not found for voms id or email, create one
         if iam_user is None:
             logging.info(
                 "No IAM account found matching VOMS user id %s found, will create a new one", voms_user['id'])
             iam_user = self.create_user_from_voms(voms_user)
+            new_user = True
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
@@ -498,10 +533,12 @@ class IamService:
             logging.info("User has email override, disable HR email sync")
             self.add_skip_email_synch_label(iam_user)
 
+        iam_group_names = set()
         for f in voms_user['fqans']:
             logging.info("Importing %s membership in VOMS FQAN: %s",
                          iam_user_str, f)
             iam_group_name = fqan2iam_group_name(f)
+            iam_group_names.add(iam_group_name)
             iam_group = self.find_group_by_name(iam_group_name)
 
             if iam_group is None:
@@ -511,7 +548,26 @@ class IamService:
                     self.label_group_as_optional(iam_group)
 
             self.add_user_to_group(iam_user, iam_group)
-        # # FIXME: the script should also remove the user from groups where it doesn't belong anymore
+
+        # remove the user from groups where it doesn't belong anymore
+        if not new_user and self._voms_groups:
+            # start with groups with longest display name, IAM automatically remove
+            # subgroups and we don't want to trigger exception by calling
+            # remove_user_from_group for missing group
+            for iam_user_group in sorted(iam_user['groups'], key=lambda x: -len(x['display'])):
+                iam_group_name = iam_user_group['display']
+                if iam_group_name in iam_group_names:
+                    continue
+
+                if iam_group_name not in self._voms_groups:
+                    # don't remove groups that doesn't come from VOMS
+                    continue
+
+                iam_group = self.find_group_by_name(iam_group_name)
+                if iam_group is None: # this should not happen
+                    continue
+
+                self.remove_user_from_group(iam_user, iam_group)
 
         logging.info("Syncing generic attributes for user %s",
                      iam_user_str)
@@ -557,7 +613,7 @@ class IamService:
 
             self.link_certificate(iam_user, cert)
 
-        if voms_user.has_key('cernHrId'):
+        if voms_user.get('cernHrId') is not None:
             logging.info("Linking user %s to CERN person id %d",
                          iam_user_str, voms_user['cernHrId'])
             self.add_cern_person_id_label(iam_user, voms_user['cernHrId'])
@@ -622,8 +678,7 @@ class IamService:
                 iam_user['displayName'])
             return
 
-        url = "%s://%s/scim/Users/%s" % (self._protocol,
-                                         self._host, iam_user['id'])
+        url = "%s/scim/Users/%s" % (self._base_url(), iam_user['id'])
 
         oidc_id = {
             'issuer': 'https://auth.cern.ch/auth/realms/cern',
@@ -689,7 +744,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None):
 
         self._host = host
         self._port = port
@@ -703,9 +758,21 @@ class IamService:
         self._merge_accounts = merge_accounts
         self._email_override = {}
         self._import_id_list = None
+        self._iam_groups = {}
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
+
+        self._voms_groups = None
+        if voms_groups or voms_roles:
+            self._voms_groups = set()
+            if voms_groups:
+                for g in voms_groups:
+                    self._voms_groups.add(voms2iam_group_name(g))
+                if voms_roles:
+                    for g in voms_groups:
+                        for r in voms_roles:
+                            self._voms_groups.add(fqan2iam_group_name("{0}/{1}".format(g, r)))
 
         self._load_token()
         self._init_session()
@@ -718,11 +785,20 @@ class VomsImporter:
         self._voms_service = VomsService(
             host=args.voms_host, port=args.voms_port, vo=args.vo)
 
+        voms_groups = None
+        voms_roles = None
+        if not args.skip_group_removal:
+            if not args.skip_groups_import:
+                voms_groups = self._voms_service.get_groups()
+            if not args.skip_roles_import:
+                voms_roles = self._voms_service.get_roles()
+
         self._iam_service = IamService(
             host=args.iam_host, port=args.iam_port, vo=args.vo, protocol=args.iam_protocol,
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
-            merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile)
+            merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
+            voms_groups=voms_groups, voms_roles=voms_roles)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -774,6 +850,7 @@ class VomsImporter:
         for id in self._voms_user_ids:
             u = self._voms_service.get_voms_user(id)
             self._iam_service.import_voms_user(u)
+            import_count = import_count + 1
             logging.info("Import count: %d", import_count)
             if self._args.count > 0 and import_count >= self._args.count:
                 logging.info(
@@ -889,6 +966,8 @@ def init_argparse():
                         action="store_true", dest="skip_roles_import", help="Skips roles import")
     parser.add_argument('--skip-users-import', required=False, default=False,
                         action="store_true", dest="skip_users_import", help="Skips users import")
+    parser.add_argument('--skip-group-removal', required=False, default=False,
+                        action="store_true", dest="skip_group_removal", help="Skips group removal")
     parser.add_argument('--vo', required=True, type=str,
                         help="The VO to be migrated", dest="vo")
     parser.add_argument('--voms-host', required=True, type=str,
