@@ -1025,8 +1025,11 @@ def main():
     args = parser.parse_args()
     init_logging(args)
     logging.debug("Arguments: %s", args)
-    importer = VomsImporter(args)
-    importer.run_import()
+    try:
+        importer = VomsImporter(args)
+        importer.run_import()
+    except Exception as e:
+        logging.warning(e, exc_info=True)
 
 
 if __name__ == '__main__':
