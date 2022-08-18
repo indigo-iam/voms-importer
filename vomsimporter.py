@@ -848,14 +848,17 @@ class VomsImporter:
         logging.info("Importing VOMS users from user id list")
         import_count = 0
         for id in self._voms_user_ids:
-            u = self._voms_service.get_voms_user(id)
-            self._iam_service.import_voms_user(u)
-            import_count = import_count + 1
-            logging.info("Import count: %d", import_count)
-            if self._args.count > 0 and import_count >= self._args.count:
-                logging.info(
-                    "Breaking after %d imported users as requested", import_count)
-                return
+            try:
+                u = self._voms_service.get_voms_user(id)
+                self._iam_service.import_voms_user(u)
+                import_count = import_count + 1
+                logging.info("Import count: %d", import_count)
+                if self._args.count > 0 and import_count >= self._args.count:
+                    logging.info(
+                        "Breaking after %d imported users as requested", import_count)
+                    return
+            except Exception as e:
+                logging.warning("Cannot import user %d: %s", id, e)
 
     def import_voms_users(self):
         logging.info("Importing VOMS users")
@@ -870,13 +873,17 @@ class VomsImporter:
             r = self._voms_service.get_voms_users(
                 pagesize=pagesize, start=start)
             for u in r['result']:
-                self._iam_service.import_voms_user(u)
-                import_count = import_count + 1
-                logging.info("Import count: %d", import_count)
-                if self._args.count > 0 and import_count >= self._args.count:
-                    logging.info(
-                        "Breaking after %d imported users as requested", import_count)
-                    return
+                try:
+                    self._iam_service.import_voms_user(u)
+                    import_count = import_count + 1
+                    logging.info("Import count: %d", import_count)
+                    if self._args.count > 0 and import_count >= self._args.count:
+                        logging.info(
+                            "Breaking after %d imported users as requested", import_count)
+                        return
+                except Exception as e:
+                    logging.warning("Cannot import user %d: %s", u['id'], e)
+
             if (r['startIndex']+r['pageSize'] < r['count']):
                 start = r['startIndex'] + r['pageSize']
             else:
@@ -1018,8 +1025,11 @@ def main():
     args = parser.parse_args()
     init_logging(args)
     logging.debug("Arguments: %s", args)
-    importer = VomsImporter(args)
-    importer.run_import()
+    try:
+        importer = VomsImporter(args)
+        importer.run_import()
+    except Exception as e:
+        logging.warning(e, exc_info=True)
 
 
 if __name__ == '__main__':
