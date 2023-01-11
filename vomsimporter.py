@@ -377,7 +377,7 @@ class IamService:
                                 cert, iam_user['id'], e.response.content)
             else:
                 logging.error("Error linking certificate: %s to account %s: %s",
-                              cert, iam_user['id'], e.response.content)
+                              cert, iam_user['id'], e.response.status_code)
 
     def set_user_attribute(self, iam_user, attribute):
         url = "%s/iam/account/%s/attributes" % (self._base_url(), iam_user['id'])
