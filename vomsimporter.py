@@ -372,14 +372,12 @@ class IamService:
             if e.response is None:
                 logging.error("Error linking certificate: %s to account %s: %s",
                               cert, iam_user['id'], e)
-                sys.exit(1)
             elif e.response.status_code == 409:
                 logging.warning("Error linking certificate: %s to account %s: %s",
                                 cert, iam_user['id'], e.response.content)
             else:
                 logging.error("Error linking certificate: %s to account %s: %s",
                               cert, iam_user['id'], e.response.content)
-                sys.exit(1)
 
     def set_user_attribute(self, iam_user, attribute):
         url = "%s/iam/account/%s/attributes" % (self._base_url(), iam_user['id'])
@@ -709,13 +707,11 @@ class IamService:
         except requests.exceptions.RequestException as e:
             if e.response is None:
                 logging.error("CERN SSO link failed: %s", e)
-                sys.exit(1)
             elif e.response.status_code == 409:
                 logging.warning(
                     "CERN SSO link failed with a conflict error: %s", e.response.content)
             else:
                 logging.error("CERN SSO link failed: %s", e.response.content)
-                sys.exit(1)
 
     def _base_url(self):
         return "%s://%s:%d" % (self._protocol, self._host, self._port)
