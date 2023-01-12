@@ -88,13 +88,6 @@ class VomsService:
         logging.debug("VOMS %s sugroups: %s", group, subgroups)
         return subgroups
 
-    def get_root_groups(self):
-        root_group = "/%s" % self._vo
-        groups = self._proxy.call_method("list-sub-groups", root_group)
-        groups.insert(0, root_group)
-        logging.debug("VOMS root_groups: %s", groups)
-        return groups
-
     def get_groups(self):
         ret = []
 
@@ -831,8 +824,8 @@ class VomsImporter:
 
     def import_voms_groups(self):
         logging.info("Importing VOMS groups")
-        groups = self._voms_service.get_root_groups()
-        self.visit_voms_groups(groups[0], self.migrate_voms_group)
+        root_group = "/%s" % self._args.vo
+        self.visit_voms_groups(root_group, self.migrate_voms_group)
 
     def import_voms_roles(self):
         logging.info("Importing VOMS roles")
