@@ -28,8 +28,6 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
       adduser --uid ${TEST_USER_UID} ${TEST_USER} && \
       usermod -a -G wheel ${TEST_USER} && \
       yum -y install nc jq java-11-openjdk && \
-      wget https://ci.cloud.cnaf.infn.it/view/repos/job/repo_test_ca/lastSuccessfulBuild/artifact/test-ca.repo -O /etc/yum.repos.d/test-ca.repo && \
-      yum -y install igi-test-ca && \
       yum -y install voms-clients-java && \
       yum -y install https://github.com/indigo-dc/oidc-agent/releases/download/v3.3.5/oidc-agent-3.3.5-1.el7.x86_64.rpm && \
       yum -y install haveged && \
