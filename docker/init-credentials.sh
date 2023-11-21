@@ -67,7 +67,7 @@ echo "has been saved to: ${proxy_file}"
 
 voms-proxy-info -all
 
-BT=$(oidc-token -s openid -s iam:admin.read -s iam:admin.write ${OIDC_AGENT_ALIAS})
+BT=$(oidc-token -s openid -s iam:admin.read -s iam:admin.write -s scim:read -s scim:write ${OIDC_AGENT_ALIAS})
 BEARER_TOKEN_FILE=/tmp/bt_u$(id -u)
 touch ${BEARER_TOKEN_FILE} && chmod 600 ${BEARER_TOKEN_FILE}
 echo ${BT} > ${BEARER_TOKEN_FILE}
