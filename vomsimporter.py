@@ -113,7 +113,8 @@ class VomsService:
         url = "https://%s:8443/voms/%s/apiv2/users" % (self._host, self._vo)
 
         r = self._session.get(
-            url, params={'startIndex': start, 'pageSize': pagesize})
+            url, params={'startIndex': start, 'pageSize': pagesize},
+            headers= {'X-VOMS-CSRF-GUARD': "y"})
         r.raise_for_status()
         return r.json()
 
@@ -121,7 +122,8 @@ class VomsService:
         logging.debug("Loading VOMS user by id: %d", uid)
         url = "https://%s:8443/voms/%s/apiv2/user-info" % (
             self._host, self._vo)
-        r = self._session.get(url, params={'userId': uid})
+        r = self._session.get(url, params={'userId': uid},
+                              headers= {'X-VOMS-CSRF-GUARD': "y"})
         r.raise_for_status()
         return r.json()
 
