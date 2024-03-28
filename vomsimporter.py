@@ -386,16 +386,16 @@ class IamService:
             r.raise_for_status()
         except requests.exceptions.RequestException as e:
             if e.response is None:
-            logging.error("Failed AUP synchronisation for account %s: %s",
+                logging.error("Failed AUP synchronisation for account %s: %s",
                             iam_user['id'], e)
             else:
-            logging.error("Failed AUP synchronisation for account %s with error: %s",
+                logging.error("Failed AUP synchronisation for account %s with error: %s",
                             iam_user['id'], e.response.content)
 
     def retrieve_aup_sign_time(self, voms_user):
         for aup in voms_user['aupAcceptanceRecords']:
             signatureTime = aup.get('lastAcceptanceDate')
-            return signatureTime.isoformat()
+            return signatureTime
 
     def set_user_attribute(self, iam_user, attribute):
         url = "%s/iam/account/%s/attributes" % (self._base_url(), iam_user['id'])
@@ -541,7 +541,7 @@ class IamService:
             iam_user = self.create_user_from_voms(voms_user)
             new_user = True
 
-        self.synchronise_aup(iam_user)
+        self.synchronise_aup(iam_user, voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
