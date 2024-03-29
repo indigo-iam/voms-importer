@@ -374,6 +374,29 @@ class IamService:
                 logging.error("Error linking certificate: %s to account %s: %s",
                               cert, iam_user['id'], e.response.status_code)
 
+    def synchronise_aup(self, iam_user, voms_user):
+        url = "%s/iam/aup/signature/%s" % (self._base_url(), iam_user['id'])
+        headers = self._build_authz_header()
+        headers['Content-type'] = "application/json"
+        payload = {
+            'signatureTime': self.retrieve_aup_sign_time(voms_user)
+        }
+        try:
+            r = self._s.patch(url, headers=headers, json=payload)
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("Failed AUP synchronisation for account %s: %s",
+                            iam_user['id'], e)
+            else:
+                logging.error("Failed AUP synchronisation for account %s with error: %s",
+                            iam_user['id'], e.response.content)
+
+    def retrieve_aup_sign_time(self, voms_user):
+        for aup in voms_user['aupAcceptanceRecords']:
+            signatureTime = aup.get('lastAcceptanceDate')
+            return signatureTime
+
     def set_user_attribute(self, iam_user, attribute):
         url = "%s/iam/account/%s/attributes" % (self._base_url(), iam_user['id'])
         r = self._s.put(url, json=attribute)
@@ -517,6 +540,8 @@ class IamService:
                 "No IAM account found matching VOMS user id %s found, will create a new one", voms_user['id'])
             iam_user = self.create_user_from_voms(voms_user)
             new_user = True
+
+        self.synchronise_aup(iam_user, voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
