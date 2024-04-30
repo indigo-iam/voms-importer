@@ -318,7 +318,7 @@ class IamService:
         payload = {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:indigo-dc:scim:schemas:IndigoUser"],
             "userName": self.build_username(voms_user),
-            "active": True,
+            "active": not voms_user['suspended'],
             "name": {
                 "familyName": voms_user['surname'],
                 "givenName": voms_user['name']
@@ -504,8 +504,11 @@ class IamService:
             voms_user['emailAddress'] = overridden_email
 
         if voms_user['suspended']:
-            logging.info("Skipping suspended user %s", user_desc)
-            return
+            if self._import_suspended_users:
+                logging.info("Importing suspended user %s", user_desc)
+            else:
+                logging.info("Skipping suspended user %s", user_desc)
+                return
 
         iam_user = self.find_user_by_voms_user(voms_user)
 
@@ -760,7 +763,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, import_suspended_users=False):
 
         self._host = host
         self._port = port
@@ -775,6 +778,7 @@ class IamService:
         self._email_override = {}
         self._import_id_list = None
         self._iam_groups = {}
+        self._import_suspended_users = import_suspended_users
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
@@ -814,7 +818,7 @@ class VomsImporter:
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
             merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
-            voms_groups=voms_groups, voms_roles=voms_roles)
+            voms_groups=voms_groups, voms_roles=voms_roles, import_suspended_users=args.import_suspended_users)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -919,7 +923,7 @@ class VomsImporter:
                          start, r['count'])
 
             for u in r['result']:
-                if u['suspended']:
+                if u['suspended'] and not self._import_suspended_users:
                     logging.debug("Skipping suspended account %s", u['id'])
                     continue
 
@@ -1024,6 +1028,8 @@ def init_argparse():
 
     parser.add_argument('--id-file', required=False,
                         help="Limits import to VOMS users matching whose id is listed in the file (one id per line).", default=None, dest="id_file")
+    parser.add_argument('--import-suspended-users', required=False,
+                        help="Imports the accounts that are suspended on VOMS Admin", default=False, action="store_true", dest="import_suspended_users")
     return parser
 
 
