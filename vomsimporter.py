@@ -603,8 +603,11 @@ class IamService:
             logging.info("Importing certificate %s for user %s" %
                          (c, iam_user_str))
             if c['suspended']:
-                logging.info('Skipping certificate %s as is suspended' % c)
-                continue
+                if self._import_suspended_users:
+                    logging.info("Importing suspended certificate %s", c)
+                else:
+                    logging.info('Skipping certificate %s as is suspended' % c)
+                    continue
 
             try:
                 converted_subject = convert_dn_rfc2253(c['subjectString'])
