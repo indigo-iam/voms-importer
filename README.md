@@ -31,7 +31,6 @@ Define the following environment variables:
 OIDC_AGENT_ALIAS=<your-client-alias>
 OIDC_AGENT_SECRET=<your-client-secret>
 IAM_ENDPOINT=iam-dev.cloud.cnaf.infn.it
-IAM_HOST=https://iam-dev.cloud.cnaf.infn.it
 VOMS_HOST=meteora.cloud.cnaf.infn.it
 VOMS_VO=test.vo
 X509_USER_PROXY=/tmp/x509up_u1000
@@ -46,5 +45,5 @@ $ ./docker/init-credentials.sh
 Run the importer with
 
 ```
-python vomsimporter.py --vo ${VOMS_VO} --voms-host ${VOMS_HOST} --iam-host ${IAM_HOST} --skip-duplicate-accounts-checks --username-attr nickname --debug --voms-port 8443
+python vomsimporter.py --vo ${VOMS_VO} --voms-host ${VOMS_HOST} --iam-host ${IAM_ENDPOINT} --skip-duplicate-accounts-checks --username-attr nickname --debug --voms-port 8443
 ```
