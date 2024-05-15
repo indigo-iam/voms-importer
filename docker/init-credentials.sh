@@ -33,7 +33,7 @@ chmod 600 ${proxyresponse}
 
 set +e
 
-curl -s -XPOST -H "Authorization: Bearer ${BT}" \
+curl -s -L -XPOST -H "Authorization: Bearer ${BT}" \
         -d client_id=${client_id} \
         -d client_secret=${client_secret} \
         -d lifetimeSecs=${PROXY_CERT_LIFETIME_SECS} \
