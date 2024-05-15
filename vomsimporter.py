@@ -374,7 +374,7 @@ class IamService:
                 logging.error("Error linking certificate: %s to account %s: %s",
                               cert, iam_user['id'], e.response.status_code)
 
-    def synchronise_aup(self, iam_user, voms_user):
+    def synchronize_aup(self, iam_user, voms_user):
         url = "%s/iam/aup/signature/%s" % (self._base_url(), iam_user['id'])
         headers = self._build_authz_header()
         headers['Content-type'] = "application/json"
@@ -386,10 +386,10 @@ class IamService:
             r.raise_for_status()
         except requests.exceptions.RequestException as e:
             if e.response is None:
-                logging.error("Failed AUP synchronisation for account %s: %s",
+                logging.error("Failed AUP synchronization for account %s: %s",
                             iam_user['id'], e)
             else:
-                logging.error("Failed AUP synchronisation for account %s with error: %s",
+                logging.error("Failed AUP synchronization for account %s with error: %s",
                             iam_user['id'], e.response.content)
 
     def synchronize_activation(self, iam_user, voms_user):
@@ -576,7 +576,7 @@ class IamService:
             iam_user = self.create_user_from_voms(voms_user)
             new_user = True
 
-        self.synchronise_aup(iam_user, voms_user)
+        self.synchronize_aup(iam_user, voms_user)
         if self._synchronize_activation_status and iam_user['active'] == voms_user['suspended']:
             self.synchronize_activation(iam_user, voms_user)
 
