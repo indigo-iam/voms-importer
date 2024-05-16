@@ -424,6 +424,27 @@ class IamService:
                 logging.error("Failed synchronizing the activation status for account %s with error: %s",
                             iam_user['id'], e.response.content)
 
+    def synchronize_end_time(self, iam_user, voms_user):
+        logging.debug("Synchronizing end time for the user %s", self.iam_user_str(iam_user))
+
+        url = "%s/iam/account/%s/endTime" % (self._base_url(), iam_user['id'])
+        headers = self._build_authz_header()
+        headers['Content-type'] = "application/json"
+        payload = {
+            'endTime': voms_user.get('endTime')
+        }
+
+        try:
+            r = self._s.put(url, headers=headers, json=payload)
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("Failed end time synchronization for account %s: %s",
+                            iam_user['id'], e)
+            else:
+                logging.error("Failed end time synchronization for account %s with error: %s",
+                            iam_user['id'], e.response.content)
+
     def retrieve_aup_sign_time(self, voms_user):
         for aup in voms_user['aupAcceptanceRecords']:
             signatureTime = aup.get('lastAcceptanceDate')
@@ -577,8 +598,12 @@ class IamService:
             new_user = True
 
         self.synchronize_aup(iam_user, voms_user)
+
         if self._synchronize_activation_status and iam_user['active'] == voms_user['suspended']:
             self.synchronize_activation(iam_user, voms_user)
+
+        if self._synchronize_end_time:
+            self.synchronize_end_time(iam_user, voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
@@ -800,7 +825,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, import_suspended_users=False, synchronize_activation_status=False):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, import_suspended_users=False, synchronize_activation_status=False, synchronize_end_time=False):
 
         self._host = host
         self._port = port
@@ -817,6 +842,7 @@ class IamService:
         self._iam_groups = {}
         self._import_suspended_users = import_suspended_users
         self._synchronize_activation_status = synchronize_activation_status
+        self._synchronize_end_time = synchronize_end_time
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
@@ -857,7 +883,8 @@ class VomsImporter:
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
             merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
             voms_groups=voms_groups, voms_roles=voms_roles, import_suspended_users=args.import_suspended_users,
-            synchronize_activation_status=args.synchronize_activation_status)
+            synchronize_activation_status=args.synchronize_activation_status,
+            synchronize_end_time=args.synchronize_end_time)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -1071,6 +1098,8 @@ def init_argparse():
                         help="Imports the suspended accounts and suspended certificates on VOMS Admin", default=False, action="store_true", dest="import_suspended_users")
     parser.add_argument('--synchronize-activation-status', required=False,
                         help="Activates or suspends existing users depending on their status on VOMS Admin", default=False, action="store_true", dest="synchronize_activation_status")
+    parser.add_argument('--synchronize-end-time', required=False,
+                        help="Synchronizes account end time from VOMS Admin", default=False, action="store_true", dest="synchronize_end_time")
     return parser
 
 
