@@ -557,7 +557,7 @@ class IamService:
             voms_user['emailAddress'] = overridden_email
 
         if voms_user['suspended']:
-            if self._import_suspended_users:
+            if self._synchronize_activation_status:
                 logging.info("Importing suspended user %s", user_desc)
             else:
                 logging.info("Skipping suspended user %s", user_desc)
@@ -602,7 +602,7 @@ class IamService:
         if self._synchronize_activation_status and iam_user['active'] == voms_user['suspended']:
             self.synchronize_activation(iam_user, voms_user)
 
-        if self._synchronize_end_time:
+        if self._synchronize_activation_status:
             self.synchronize_end_time(iam_user, voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
@@ -662,7 +662,7 @@ class IamService:
             logging.info("Importing certificate %s for user %s" %
                          (c, iam_user_str))
             if c['suspended']:
-                if self._import_suspended_users:
+                if self._synchronize_activation_status:
                     logging.info("Importing suspended certificate %s", c)
                 else:
                     logging.info('Skipping certificate %s as is suspended' % c)
@@ -825,7 +825,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, import_suspended_users=False, synchronize_activation_status=False, synchronize_end_time=False):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, synchronize_activation_status=False):
 
         self._host = host
         self._port = port
@@ -840,9 +840,7 @@ class IamService:
         self._email_override = {}
         self._import_id_list = None
         self._iam_groups = {}
-        self._import_suspended_users = import_suspended_users
         self._synchronize_activation_status = synchronize_activation_status
-        self._synchronize_end_time = synchronize_end_time
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
@@ -882,9 +880,7 @@ class VomsImporter:
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
             merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
-            voms_groups=voms_groups, voms_roles=voms_roles, import_suspended_users=args.import_suspended_users,
-            synchronize_activation_status=args.synchronize_activation_status,
-            synchronize_end_time=args.synchronize_end_time)
+            voms_groups=voms_groups, voms_roles=voms_roles, synchronize_activation_status=args.synchronize_activation_status)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -989,7 +985,7 @@ class VomsImporter:
                          start, r['count'])
 
             for u in r['result']:
-                if u['suspended'] and not self._import_suspended_users:
+                if u['suspended'] and not self._synchronize_activation_status:
                     logging.debug("Skipping suspended account %s", u['id'])
                     continue
 
@@ -1094,12 +1090,8 @@ def init_argparse():
 
     parser.add_argument('--id-file', required=False,
                         help="Limits import to VOMS users matching whose id is listed in the file (one id per line).", default=None, dest="id_file")
-    parser.add_argument('--import-suspended-users', required=False,
-                        help="Imports the suspended accounts and suspended certificates on VOMS Admin", default=False, action="store_true", dest="import_suspended_users")
     parser.add_argument('--synchronize-activation-status', required=False,
                         help="Activates or suspends existing users depending on their status on VOMS Admin", default=False, action="store_true", dest="synchronize_activation_status")
-    parser.add_argument('--synchronize-end-time', required=False,
-                        help="Synchronizes account end time from VOMS Admin", default=False, action="store_true", dest="synchronize_end_time")
     return parser
 
 
