@@ -327,7 +327,8 @@ class IamService:
                 "value": voms_user['emailAddress'],
                 "type": "work",
                 "primary": True
-            }]
+            }],
+            "endTime": voms_user.get('endTime')
         }
 
         r = self._s.post(url, headers=headers, json=payload)
