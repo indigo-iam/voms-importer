@@ -318,7 +318,7 @@ class IamService:
         payload = {
             "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:indigo-dc:scim:schemas:IndigoUser"],
             "userName": self.build_username(voms_user),
-            "active": True,
+            "active": not voms_user['suspended'],
             "name": {
                 "familyName": voms_user['surname'],
                 "givenName": voms_user['name']
@@ -327,7 +327,8 @@ class IamService:
                 "value": voms_user['emailAddress'],
                 "type": "work",
                 "primary": True
-            }]
+            }],
+            "endTime": voms_user.get('endTime')
         }
 
         r = self._s.post(url, headers=headers, json=payload)
@@ -374,7 +375,7 @@ class IamService:
                 logging.error("Error linking certificate: %s to account %s: %s",
                               cert, iam_user['id'], e.response.status_code)
 
-    def synchronise_aup(self, iam_user, voms_user):
+    def synchronize_aup(self, iam_user, voms_user):
         url = "%s/iam/aup/signature/%s" % (self._base_url(), iam_user['id'])
         headers = self._build_authz_header()
         headers['Content-type'] = "application/json"
@@ -386,10 +387,63 @@ class IamService:
             r.raise_for_status()
         except requests.exceptions.RequestException as e:
             if e.response is None:
-                logging.error("Failed AUP synchronisation for account %s: %s",
+                logging.error("Failed AUP synchronization for account %s: %s",
                             iam_user['id'], e)
             else:
-                logging.error("Failed AUP synchronisation for account %s with error: %s",
+                logging.error("Failed AUP synchronization for account %s with error: %s",
+                            iam_user['id'], e.response.content)
+
+    def synchronize_activation(self, iam_user, voms_user):
+        url = "%s/scim/Users/%s" % (self._base_url(), iam_user['id'])
+        payload = {
+            "schemas": [
+                "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+            ],
+            "operations": [
+                {
+                    "op": "replace",
+                    "value": {
+                        "active": not voms_user['suspended']
+                    }
+                }
+            ]
+        }
+        headers = {'Content-type': 'application/scim+json'}
+
+        try:
+            if voms_user['suspended']:
+                logging.info("Suspending the user: %s", voms_user['id'])
+            else:
+                logging.info("Activating the user: %s", voms_user['id'])
+            r = self._s.patch(url, headers=headers, json=payload)
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("Failed synchronizing the activation status for account %s: %s",
+                            iam_user['id'], e)
+            else:
+                logging.error("Failed synchronizing the activation status for account %s with error: %s",
+                            iam_user['id'], e.response.content)
+
+    def synchronize_end_time(self, iam_user, voms_user):
+        logging.debug("Synchronizing end time for the user %s", self.iam_user_str(iam_user))
+
+        url = "%s/iam/account/%s/endTime" % (self._base_url(), iam_user['id'])
+        headers = self._build_authz_header()
+        headers['Content-type'] = "application/json"
+        payload = {
+            'endTime': voms_user.get('endTime')
+        }
+
+        try:
+            r = self._s.put(url, headers=headers, json=payload)
+            r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            if e.response is None:
+                logging.error("Failed end time synchronization for account %s: %s",
+                            iam_user['id'], e)
+            else:
+                logging.error("Failed end time synchronization for account %s with error: %s",
                             iam_user['id'], e.response.content)
 
     def retrieve_aup_sign_time(self, voms_user):
@@ -504,8 +558,11 @@ class IamService:
             voms_user['emailAddress'] = overridden_email
 
         if voms_user['suspended']:
-            logging.info("Skipping suspended user %s", user_desc)
-            return
+            if self._synchronize_activation_status:
+                logging.info("Importing suspended user %s", user_desc)
+            else:
+                logging.info("Skipping suspended user %s", user_desc)
+                return
 
         iam_user = self.find_user_by_voms_user(voms_user)
 
@@ -541,7 +598,13 @@ class IamService:
             iam_user = self.create_user_from_voms(voms_user)
             new_user = True
 
-        self.synchronise_aup(iam_user, voms_user)
+        self.synchronize_aup(iam_user, voms_user)
+
+        if self._synchronize_activation_status and iam_user['active'] == voms_user['suspended']:
+            self.synchronize_activation(iam_user, voms_user)
+
+        if self._synchronize_activation_status:
+            self.synchronize_end_time(iam_user, voms_user)
 
         iam_user_str = self.iam_user_str(iam_user)
         logging.info("Syncing group/role membership for user %s",
@@ -600,8 +663,11 @@ class IamService:
             logging.info("Importing certificate %s for user %s" %
                          (c, iam_user_str))
             if c['suspended']:
-                logging.info('Skipping certificate %s as is suspended' % c)
-                continue
+                if self._synchronize_activation_status:
+                    logging.info("Importing suspended certificate %s", c)
+                else:
+                    logging.info('Skipping certificate %s as is suspended' % c)
+                    continue
 
             try:
                 converted_subject = convert_dn_rfc2253(c['subjectString'])
@@ -760,7 +826,7 @@ class IamService:
                              r['id'], r['email'])
                 self._email_override[int(r['id'])] = r['email']
 
-    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None):
+    def __init__(self, host, port, vo, ldap_host, ldap_port, protocol="https", username_attr=None, link_cern_sso=False, link_cern_sso_ldap=False, merge_accounts=False, email_mapfile=None, voms_groups=None, voms_roles=None, synchronize_activation_status=False):
 
         self._host = host
         self._port = port
@@ -775,6 +841,7 @@ class IamService:
         self._email_override = {}
         self._import_id_list = None
         self._iam_groups = {}
+        self._synchronize_activation_status = synchronize_activation_status
 
         if email_mapfile is not None:
             self._load_email_override_csv_file(email_mapfile)
@@ -814,7 +881,7 @@ class VomsImporter:
             username_attr=args.username_attr, link_cern_sso=args.link_cern_sso,
             link_cern_sso_ldap=args.link_cern_sso_ldap, ldap_host=args.cern_ldap_host, ldap_port=args.cern_ldap_port,
             merge_accounts=args.merge_accounts, email_mapfile=args.email_mapfile,
-            voms_groups=voms_groups, voms_roles=voms_roles)
+            voms_groups=voms_groups, voms_roles=voms_roles, synchronize_activation_status=args.synchronize_activation_status)
 
         self._import_id = uuid.uuid4()
         self._voms_user_ids = []
@@ -919,7 +986,7 @@ class VomsImporter:
                          start, r['count'])
 
             for u in r['result']:
-                if u['suspended']:
+                if u['suspended'] and not self._synchronize_activation_status:
                     logging.debug("Skipping suspended account %s", u['id'])
                     continue
 
@@ -1024,6 +1091,8 @@ def init_argparse():
 
     parser.add_argument('--id-file', required=False,
                         help="Limits import to VOMS users matching whose id is listed in the file (one id per line).", default=None, dest="id_file")
+    parser.add_argument('--synchronize-activation-status', required=False,
+                        help="Activates or suspends existing users depending on their status on VOMS Admin", default=False, action="store_true", dest="synchronize_activation_status")
     return parser
 
 

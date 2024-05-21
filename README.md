@@ -30,8 +30,8 @@ Define the following environment variables:
 ```
 OIDC_AGENT_ALIAS=<your-client-alias>
 OIDC_AGENT_SECRET=<your-client-secret>
-IAM_ENDPOINT=iam-dev.cloud.cnaf.infn.it
-IAM_HOST=https://iam-dev.cloud.cnaf.infn.it
+IAM_ENDPOINT=https://iam-dev.cloud.cnaf.infn.it
+IAM_HOST=iam-dev.cloud.cnaf.infn.it
 VOMS_HOST=meteora.cloud.cnaf.infn.it
 VOMS_VO=test.vo
 X509_USER_PROXY=/tmp/x509up_u1000
