@@ -36,6 +36,7 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
 
 
 ENV TINI_VERSION v0.18.0
+ENV REQUESTS_CA_BUNDLE /etc/pki/tls/cert.pem
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 ADD ./convert_dn /usr/local/bin
