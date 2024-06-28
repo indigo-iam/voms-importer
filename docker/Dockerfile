@@ -34,6 +34,8 @@ RUN yum -y install openldap openldap-clients openssl git which hostname epel-rel
       yum clean all && \
       rm -rf /var/cache/yum
 
+COPY egi-trustanchors.repo /etc/yum.repos.d/
+COPY init-certificates.sh /usr/local/bin/init-certificates.sh
 
 ENV TINI_VERSION v0.18.0
 ENV REQUESTS_CA_BUNDLE /etc/pki/tls/cert.pem
