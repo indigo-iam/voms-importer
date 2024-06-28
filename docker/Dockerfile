@@ -21,7 +21,7 @@ RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py > get-pip.py && \
   pip install requests && \
   yum -y install python-ldap && \
   yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-externals-rpm/centos7/python2-zsi-2.1-16.el7.noarch.rpm && \
-  yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-rpm-stable/centos7/voms-admin-client-2.0.20-1.el7.noarch.rpm 
+  yum -y install https://repo.cloud.cnaf.infn.it/repository/voms-rpm-stable/centos7/voms-admin-client-2.0.20-1.el7.noarch.rpm
 
 RUN yum -y install openldap openldap-clients openssl git which hostname epel-release sudo file wget && \
       echo '%wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
