@@ -57,11 +57,12 @@ class VomsError(Exception):
 
 
 class VomsService:
-    def __init__(self, host, port, vo, protocol="https"):
+    def __init__(self, host, port, vo, protocol="https", insecure=False):
         self._host = host
         self._port = port
         self._protocol = protocol
         self._vo = vo
+        self._insecure = insecure
         self._load_x509_credentials()
         self._init_voms_admin_proxy()
 
@@ -114,6 +115,7 @@ class VomsService:
 
         r = self._session.get(
             url, params={'startIndex': start, 'pageSize': pagesize},
+            verify = False if ( self._insecure ) else True,
             headers= {'X-VOMS-CSRF-GUARD': "y"})
         r.raise_for_status()
         return r.json()
@@ -866,7 +868,7 @@ class VomsImporter:
         self._args = args
 
         self._voms_service = VomsService(
-            host=args.voms_host, port=args.voms_port, vo=args.vo)
+            host=args.voms_host, port=args.voms_port, vo=args.vo, insecure=args.insecure)
 
         voms_groups = None
         voms_roles = None
@@ -1074,6 +1076,8 @@ def init_argparse():
                         help="Start from this index when syncing users", dest="start_index", default=0)
     parser.add_argument('--count', required=False, type=int,
                         help="Import at most 'count' user records", dest="count", default=-1)
+    parser.add_argument('--insecure', required=False, default=False, action='store_true',
+                        help="Disable SSL certificate verification when interacting with VOMS server")
     parser.add_argument('--username-attr', required=False, type=str,
                         help="Uses the VOMS GA passed as argument for building the username", dest="username_attr", default=None)
     parser.add_argument('--link-cern-sso', required=False,
