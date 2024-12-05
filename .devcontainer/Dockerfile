@@ -9,5 +9,6 @@ COPY assets/vomses /etc/vomses
 COPY assets/vomsdir /etc/grid-security/vomsdir/
 COPY assets/EGI-trustanchors.repo /etc/yum.repos.d/
 
-RUN bash /tmp/library-scripts/provide-user.sh ${USERNAME} ${USER_UID} ${USER_GID} \
+RUN bash /tmp/library-scripts/provide-vault.sh \
+ && bash /tmp/library-scripts/provide-user.sh ${USERNAME} ${USER_UID} ${USER_GID} \
  && bash /tmp/library-scripts/provide-deps.sh

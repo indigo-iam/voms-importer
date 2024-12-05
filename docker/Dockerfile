@@ -1,8 +1,9 @@
 FROM centos:7 as builder
 
 ADD rfc2253 /root/rfc2253
+ADD provide-vault.sh /tmp
 
-RUN yum -y install gcc-c++ openssl-devel
+RUN bash /tmp/provide-vault.sh && yum -y install gcc-c++ openssl-devel
 RUN cd /root/rfc2253 && c++ --version && c++ --std=c++11 -lcrypto -lssl -o dn_converter rfc2253.cpp
 
 FROM centos:7
@@ -11,12 +12,15 @@ FROM centos:7
 ARG TEST_USER=test
 ARG TEST_USER_UID=501
 
+ADD provide-vault.sh /tmp
+
 COPY --from=builder /root/rfc2253/dn_converter /usr/local/bin/dn_converter
 
 ENV TEST_USER $TEST_USER
 ENV TEST_USER_UID $TEST_USER_UID
 
-RUN curl https://bootstrap.pypa.io/pip/2.7/get-pip.py > get-pip.py && \
+RUN bash /tmp/provide-vault.sh && \
+  curl https://bootstrap.pypa.io/pip/2.7/get-pip.py > get-pip.py && \
   python get-pip.py && \
   pip install requests && \
   yum -y install python-ldap && \

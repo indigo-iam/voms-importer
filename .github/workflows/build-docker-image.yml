@@ -29,8 +29,8 @@ jobs:
             type=semver,pattern={{raw}}
             type=ref,event=branch
 
-      - name: Copy script to docker dir
-        run: cp vomsimporter.py docker
+      - name: Copy scripts to docker dir
+        run: cp vomsimporter.py .devcontainer/library-scripts/provide-vault.sh docker 
 
       - name: Build Docker image
         uses: docker/build-push-action@v3
