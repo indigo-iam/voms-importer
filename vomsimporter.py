@@ -9,6 +9,7 @@ import subprocess
 import csv
 import ldap
 
+from distutils.spawn import find_executable
 from VOMSAdmin.VOMSCommands import VOMSAdminProxy
 
 os.environ['SSL_CERT_DIR'] = '/etc/grid-security/certificates'
@@ -1040,7 +1041,7 @@ class VomsImporter:
 
 
 def error_and_exit(msg):
-    print("%s", msg)
+    print("%s" % msg)
     sys.exit(1)
 
 
@@ -1113,6 +1114,9 @@ def main():
     parser = init_argparse()
     args = parser.parse_args()
     init_logging(args)
+
+    if not find_executable(DN_CONVERTER_COMMAND):
+        error_and_exit("ERROR: Command '%s' not found in the path" % DN_CONVERTER_COMMAND)
     logging.debug("Arguments: %s", args)
     try:
         importer = VomsImporter(args)
